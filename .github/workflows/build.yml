@@ -31,6 +31,17 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
         
+    - name: Create debug keystore
+      run: |
+        mkdir -p ~/.android
+        if [ ! -f ~/.android/debug.keystore ]; then
+          echo "Creating debug keystore..."
+          keytool -genkey -v -keystore ~/.android/debug.keystore \
+            -storepass android -alias androiddebugkey -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+        fi
+        
     - name: Download Gradle Wrapper JAR
       run: |
         if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
@@ -81,12 +92,21 @@ jobs:
       id: date
       run: echo "date=$(date +'%Y-%m-%d-%H%M')" >> $GITHUB_OUTPUT
         
-    - name: List APK files
+    - name: Verify APK files
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         echo "=== APK Files ==="
         find app/build/outputs/apk -name "*.apk" -type f || echo "No APK files found"
         ls -la app/build/outputs/apk/release/ || echo "Release directory not found"
+        ls -la app/build/outputs/apk/debug/ || echo "Debug directory not found"
+        
+        # Verify APK signatures
+        for apk in app/build/outputs/apk/release/*.apk app/build/outputs/apk/debug/*.apk; do
+          if [ -f "$apk" ]; then
+            echo "Verifying $apk..."
+            aapt dump badging "$apk" | head -5 || echo "Could not verify $apk"
+          fi
+        done
         
     - name: Create Release
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -113,6 +133,7 @@ jobs:
           Built: ${{ steps.date.outputs.date }}
           Commit: ${{ github.sha }}
         files: |
+          app/build/outputs/apk/debug/*.apk
           app/build/outputs/apk/release/*.apk
         draft: false
         prerelease: false
