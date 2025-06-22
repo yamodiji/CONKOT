@@ -7,7 +7,7 @@
     
     <!-- Background circle -->
     <path
-        android:fillColor="@color/launcher_background"
+        android:fillColor="@color/ic_launcher_background"
         android:pathData="M24,24m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0" />
     
     <!-- Search/Speed icon -->
