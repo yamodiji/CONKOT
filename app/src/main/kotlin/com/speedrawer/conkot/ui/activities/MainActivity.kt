@@ -17,8 +17,10 @@ import android.view.MenuItem
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
@@ -42,164 +44,302 @@ class MainActivity : AppCompatActivity() {
     
     companion object {
         private const val TAG = "MainActivity"
-        private const val PERMISSION_REQUEST_CODE = 100
+        private const val REQUEST_QUERY_ALL_PACKAGES = 1001
+        private const val REQUEST_OVERLAY_PERMISSION = 1002
+    }
+    
+    // Permission launchers for modern Android
+    private val overlayPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        Log.d(TAG, "Overlay permission result received")
+        checkPermissionsAndLoadApps()
+    }
+    
+    private val appSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        Log.d(TAG, "App settings result received")
+        checkPermissionsAndLoadApps()
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "onCreate started")
+        Log.d(TAG, "MainActivity onCreate - Android ${Build.VERSION.SDK_INT}")
         
         try {
-            // Check critical permissions first
-            if (!hasRequiredPermissions()) {
-                Log.w(TAG, "Missing required permissions")
-                showPermissionError()
-                return
-            }
-            
-            Log.d(TAG, "Inflating layout...")
             binding = ActivityMainBinding.inflate(layoutInflater)
             setContentView(binding.root)
-            Log.d(TAG, "Layout inflated successfully")
             
-            Log.d(TAG, "Setting up UI...")
+            setSupportActionBar(binding.toolbar)
+            supportActionBar?.title = "CONKOT"
+            
             setupUI()
-            Log.d(TAG, "UI setup complete")
+            checkPermissionsAndLoadApps()
             
-            Log.d(TAG, "Setting up RecyclerView...")
-            setupRecyclerView()
-            Log.d(TAG, "RecyclerView setup complete")
-            
-            Log.d(TAG, "Setting up search...")
-            setupSearch()
-            Log.d(TAG, "Search setup complete")
-            
-            Log.d(TAG, "Setting up observers...")
-            setupObservers()
-            Log.d(TAG, "Observers setup complete")
-            
-            // Auto-focus search if enabled
-            try {
-                if (viewModel.showKeyboard) {
-                    showKeyboard()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error showing keyboard", e)
-            }
-            
-            Log.d(TAG, "onCreate completed successfully")
         } catch (e: Exception) {
-            // Handle initialization errors gracefully
-            Log.e(TAG, "Critical error in onCreate", e)
+            Log.e(TAG, "Error in onCreate", e)
             handleCriticalError(e)
         }
     }
     
-    private fun hasRequiredPermissions(): Boolean {
-        return try {
+    private fun checkPermissionsAndLoadApps() {
+        try {
+            Log.d(TAG, "Checking permissions for Android ${Build.VERSION.SDK_INT}")
+            
             when {
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
-                    // Android 11+ (including Android 15) - Check multiple permission methods
-                    val hasQueryPackages = try {
-                        packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-                        true
-                    } catch (e: SecurityException) {
-                        Log.w(TAG, "QUERY_ALL_PACKAGES permission not available", e)
-                        false
+                Build.VERSION.SDK_INT >= 35 -> {
+                    // Android 15 - Check if we can access apps
+                    if (canAccessApps()) {
+                        Log.d(TAG, "Android 15: Apps accessible, loading apps")
+                        loadApps()
+                    } else {
+                        Log.d(TAG, "Android 15: Apps not accessible, requesting permissions")
+                        requestAndroid15Permissions()
                     }
-                    
-                    val hasOverlayPermission = Settings.canDrawOverlays(this)
-                    
-                    Log.d(TAG, "Android ${Build.VERSION.RELEASE}: QueryPackages=$hasQueryPackages, Overlay=$hasOverlayPermission")
-                    
-                    // For Android 11+, we need at least overlay permission or query packages permission
-                    hasQueryPackages || hasOverlayPermission
                 }
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
-                    // Android 6-10 - Check overlay permission
-                    Settings.canDrawOverlays(this)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                    // Android 11-14 - Check QUERY_ALL_PACKAGES
+                    if (hasQueryAllPackagesPermission()) {
+                        Log.d(TAG, "Android 11+: QUERY_ALL_PACKAGES granted, loading apps")
+                        loadApps()
+                    } else {
+                        Log.d(TAG, "Android 11+: QUERY_ALL_PACKAGES not granted, requesting permission")
+                        requestQueryAllPackagesPermission()
+                    }
                 }
                 else -> {
-                    // Android 5 and below - No special permissions needed
-                    true
+                    // Android 10 and below - Should work without special permissions
+                    Log.d(TAG, "Android 10 and below: Loading apps directly")
+                    loadApps()
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error checking permissions", e)
+            showErrorDialog("Permission Check Failed", "Unable to check app permissions: ${e.message}")
+        }
+    }
+    
+    private fun canAccessApps(): Boolean {
+        return try {
+            val pm = packageManager
+            
+            // Try multiple methods to check app access
+            val launcherApps = try {
+                val intent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                }
+                pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            
+            val installedApps = try {
+                pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            
+            val canAccessLauncher = launcherApps.size > 5
+            val canAccessInstalled = installedApps.size > 20
+            
+            Log.d(TAG, "App access check - Launcher apps: ${launcherApps.size}, Installed apps: ${installedApps.size}")
+            Log.d(TAG, "Can access launcher: $canAccessLauncher, Can access installed: $canAccessInstalled")
+            
+            canAccessLauncher || canAccessInstalled
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking app access", e)
             false
         }
     }
     
-    private fun showPermissionError() {
-        try {
+    private fun hasQueryAllPackagesPermission(): Boolean {
+        return try {
+            val permissionGranted = ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.QUERY_ALL_PACKAGES
+            ) == PackageManager.PERMISSION_GRANTED
+            
+            Log.d(TAG, "QUERY_ALL_PACKAGES permission: $permissionGranted")
+            
+            // Also test if we can actually query apps
+            if (permissionGranted) {
+                val pm = packageManager
+                val apps = try {
+                    pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                val actuallyWorks = apps.size > 20
+                Log.d(TAG, "Permission granted but can query ${apps.size} apps - actually works: $actuallyWorks")
+                return actuallyWorks
+            }
+            
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking QUERY_ALL_PACKAGES permission", e)
+            false
+        }
+    }
+    
+    private fun requestAndroid15Permissions() {
+        // For Android 15, show a dialog explaining what we need
+        AlertDialog.Builder(this)
+            .setTitle("App Access Required")
+            .setMessage("""
+                CONKOT needs to access your installed apps to display them.
+                
+                On Android 15, this requires special permission. Please:
+                
+                1. Tap "Grant Permission" below
+                2. Find "Display over other apps" or "Query all packages"
+                3. Enable the permission for CONKOT
+                4. Return to this app
+                
+                This is a one-time setup.
+            """.trimIndent())
+            .setPositiveButton("Grant Permission") { _, _ ->
+                openAppPermissionSettings()
+            }
+            .setNegativeButton("Try Alternative") { _, _ ->
+                requestBasicPermissions()
+            }
+            .setNeutralButton("Skip") { _, _ ->
+                showLimitedFunctionalityWarning()
+            }
+            .setCancelable(false)
+            .show()
+    }
+    
+    private fun requestQueryAllPackagesPermission() {
+        // For Android 11-14, try runtime permission request first
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Try to request the permission directly first
+            try {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.QUERY_ALL_PACKAGES),
+                    REQUEST_QUERY_ALL_PACKAGES
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Cannot request QUERY_ALL_PACKAGES at runtime", e)
+                // Fall back to settings
+                showQueryAllPackagesDialog()
+            }
+        } else {
+            showQueryAllPackagesDialog()
+        }
+    }
+    
+    private fun showQueryAllPackagesDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("App Discovery Permission")
+            .setMessage("""
+                To show all your installed apps, CONKOT needs the "Query All Packages" permission.
+                
+                This is required on Android 11+ for security reasons.
+                
+                Please enable this permission in the next screen.
+            """.trimIndent())
+            .setPositiveButton("Enable Permission") { _, _ ->
+                openAppPermissionSettings()
+            }
+            .setNegativeButton("Continue with Limited Apps") { _, _ ->
+                showLimitedFunctionalityWarning()
+                loadApps() // Load with whatever apps we can see
+            }
+            .setCancelable(false)
+            .show()
+    }
+    
+    private fun requestBasicPermissions() {
+        // Try to request overlay permission as a fallback
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             AlertDialog.Builder(this)
-                .setTitle("App Discovery Permissions Required")
-                .setMessage("""
-                    CONKOT needs special permissions to discover your installed apps on Android ${Build.VERSION.RELEASE}.
-                    
-                    This is required for the app to function properly.
-                    
-                    Tap "Setup Permissions" to be guided through the process.
-                """.trimIndent())
-                .setPositiveButton("Setup Permissions") { _, _ ->
+                .setTitle("Display Permission")
+                .setMessage("CONKOT needs permission to display over other apps. This helps with app discovery.")
+                .setPositiveButton("Grant") { _, _ ->
                     try {
-                        val intent = Intent(this, PermissionActivity::class.java)
-                        startActivity(intent)
-                        finish()
+                        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                        intent.data = Uri.parse("package:$packageName")
+                        overlayPermissionLauncher.launch(intent)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to open permission activity", e)
-                        openManualSettings()
+                        Log.e(TAG, "Error requesting overlay permission", e)
+                        openAppPermissionSettings()
                     }
                 }
-                .setNegativeButton("Manual Setup") { _, _ ->
-                    openManualSettings()
+                .setNegativeButton("Skip") { _, _ ->
+                    showLimitedFunctionalityWarning()
+                    loadApps()
                 }
-                .setNeutralButton("Exit") { _, _ ->
-                    finish()
-                }
-                .setCancelable(false)
                 .show()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to show permission dialog", e)
-            Toast.makeText(this, "Permission required to access installed apps", Toast.LENGTH_LONG).show()
-            openManualSettings()
+        } else {
+            // If overlay permission is already granted or not needed, try to load apps
+            loadApps()
         }
     }
     
-    private fun openManualSettings() {
+    private fun openAppPermissionSettings() {
         try {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = android.net.Uri.parse("package:$packageName")
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            intent.data = Uri.parse("package:$packageName")
+            appSettingsLauncher.launch(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error opening app settings", e)
+            Toast.makeText(this, "Please enable permissions manually in Settings → Apps → CONKOT", Toast.LENGTH_LONG).show()
+            loadApps() // Try to load whatever we can
+        }
+    }
+    
+    private fun showLimitedFunctionalityWarning() {
+        AlertDialog.Builder(this)
+            .setTitle("Limited Functionality")
+            .setMessage("""
+                Without the required permissions, CONKOT may only show a limited number of apps.
+                
+                You can enable full permissions later in:
+                Settings → Apps → CONKOT → Permissions
+            """.trimIndent())
+            .setPositiveButton("OK") { _, _ ->
+                loadApps()
             }
-            startActivity(intent)
-            finish()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to open app settings", e)
-            Toast.makeText(this, "Please go to Settings → Apps → CONKOT and enable permissions", Toast.LENGTH_LONG).show()
-            finish()
-        }
+            .show()
     }
     
-    private fun handleCriticalError(e: Exception) {
+    private fun loadApps() {
         try {
-            val errorMessage = "App initialization failed: ${e.message}"
-            Log.e(TAG, errorMessage, e)
-            
-            AlertDialog.Builder(this)
-                .setTitle("Error")
-                .setMessage("Sorry, the app couldn't start properly. Please try restarting the app or check if you have granted all required permissions.")
-                .setPositiveButton("Retry") { _, _ ->
-                    recreate()
+            Log.d(TAG, "Loading apps...")
+            lifecycleScope.launch {
+                try {
+                    viewModel.refreshApps()
+                    Log.d(TAG, "Apps refresh initiated")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error refreshing apps", e)
+                    showErrorDialog("App Loading Failed", "Unable to load apps: ${e.message}")
                 }
-                .setNegativeButton("Exit") { _, _ ->
-                    finish()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting app load", e)
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        
+        Log.d(TAG, "Permission result: requestCode=$requestCode, results=${grantResults.contentToString()}")
+        
+        when (requestCode) {
+            REQUEST_QUERY_ALL_PACKAGES -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "QUERY_ALL_PACKAGES permission granted via runtime request")
+                    Toast.makeText(this, "Permission granted! Loading apps...", Toast.LENGTH_SHORT).show()
+                    loadApps()
+                } else {
+                    Log.d(TAG, "QUERY_ALL_PACKAGES permission denied via runtime request")
+                    // Show the settings dialog as fallback
+                    showQueryAllPackagesDialog()
                 }
-                .setCancelable(false)
-                .show()
-        } catch (dialogError: Exception) {
-            Log.e(TAG, "Failed to show error dialog", dialogError)
-            Toast.makeText(this, "Critical error occurred", Toast.LENGTH_LONG).show()
-            finish()
+            }
         }
     }
     
@@ -548,169 +688,48 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         try {
-            // Refresh apps when returning to activity
-            viewModel.refreshApps()
+            Log.d(TAG, "onResume - checking if we need to reload apps")
+            // Only reload if we don't have apps yet
+            lifecycleScope.launch {
+                try {
+                    // Check if we have apps loaded
+                    viewModel.filteredApps.value.let { apps ->
+                        if (apps.isEmpty()) {
+                            Log.d(TAG, "No apps loaded, triggering refresh")
+                            viewModel.refreshApps()
+                        } else {
+                            Log.d(TAG, "Apps already loaded (${apps.size} apps)")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in onResume refresh check", e)
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error in onResume", e)
         }
     }
     
-    override fun onDestroy() {
+    private fun handleCriticalError(e: Exception) {
         try {
-            super.onDestroy()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in onDestroy", e)
-        }
-    }
-
-    private fun checkPermissionsAndSetup() {
-        try {
-            Log.d(TAG, "Checking permissions for Android ${Build.VERSION.SDK_INT}")
+            val errorMessage = "App initialization failed: ${e.message}"
+            Log.e(TAG, errorMessage, e)
             
-            // Enhanced permission checking for Android 15
-            when {
-                Build.VERSION.SDK_INT >= 35 -> {
-                    // Android 15 - Most restrictive
-                    if (!hasAndroid15Permissions()) {
-                        Log.w(TAG, "Android 15 permissions not granted, launching PermissionActivity")
-                        launchPermissionActivity()
-                        return
-                    }
+            AlertDialog.Builder(this)
+                .setTitle("Error")
+                .setMessage("Sorry, the app couldn't start properly. Please try restarting the app or check if you have granted all required permissions.")
+                .setPositiveButton("Retry") { _, _ ->
+                    recreate()
                 }
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
-                    // Android 11-14
-                    if (!hasQueryAllPackagesPermission()) {
-                        Log.w(TAG, "QUERY_ALL_PACKAGES permission not granted, launching PermissionActivity")
-                        launchPermissionActivity()
-                        return
-                    }
+                .setNegativeButton("Exit") { _, _ ->
+                    finish()
                 }
-                else -> {
-                    // Android 10 and below - usually no issues
-                    Log.d(TAG, "Android ${Build.VERSION.SDK_INT} - checking basic permissions")
-                }
-            }
-            
-            // If we get here, permissions should be OK, proceed with setup
-            setupUI()
-            // Refresh apps after setup
-            lifecycleScope.launch {
-                try {
-                    viewModel.refreshApps()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error refreshing apps", e)
-                }
-            }
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking permissions", e)
-            showErrorDialog("Permission Check Failed", 
-                "Unable to verify app permissions. Error: ${e.message}")
-        }
-    }
-    
-    private fun hasAndroid15Permissions(): Boolean {
-        return try {
-            // Multiple permission checks for Android 15
-            val hasQueryPackages = hasQueryAllPackagesPermission()
-            val canQueryInstalledApps = canQueryInstalledApplications()
-            val hasBasicAccess = hasBasicAppAccess()
-            
-            Log.d(TAG, "Android 15 permission check - Query: $hasQueryPackages, Apps: $canQueryInstalledApps, Basic: $hasBasicAccess")
-            
-            // Android 15 is more lenient, if we can query any apps, continue
-            return hasQueryPackages || canQueryInstalledApps || hasBasicAccess
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking Android 15 permissions", e)
-            false
-        }
-    }
-    
-    private fun canQueryInstalledApplications(): Boolean {
-        return try {
-            val pm = packageManager
-            val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            Log.d(TAG, "Can query ${apps.size} applications")
-            apps.size > 10 // If we can see more than 10 apps, permissions are likely OK
-        } catch (e: Exception) {
-            Log.e(TAG, "Cannot query installed applications", e)
-            false
-        }
-    }
-    
-    private fun hasBasicAppAccess(): Boolean {
-        return try {
-            val pm = packageManager
-            // Try to get launcher apps
-            val intent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_LAUNCHER)
-            }
-            val apps = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-            Log.d(TAG, "Can query ${apps.size} launcher apps")
-            apps.size > 5 // If we can see some launcher apps, basic access is working
-        } catch (e: Exception) {
-            Log.e(TAG, "Cannot query launcher apps", e)
-            false
-        }
-    }
-    
-    private fun hasQueryAllPackagesPermission(): Boolean {
-        return try {
-            when {
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
-                    // For Android 11+, check multiple ways
-                    val permissionGranted = ContextCompat.checkSelfPermission(
-                        this,
-                        android.Manifest.permission.QUERY_ALL_PACKAGES
-                    ) == PackageManager.PERMISSION_GRANTED
-                    
-                    // Try to query all packages as a test
-                    val pm = packageManager
-                    val installedApps = try {
-                        pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                    } catch (e: Exception) {
-                        emptyList()
-                    }
-                    
-                    val hasAppAccess = installedApps.size > 50 // Reasonable threshold
-                    
-                    Log.d(TAG, "Query All Packages - Permission: $permissionGranted, Apps found: ${installedApps.size}, HasAccess: $hasAppAccess")
-                    
-                    // For Android 15, be more lenient
-                    if (Build.VERSION.SDK_INT >= 35) {
-                        return hasAppAccess || permissionGranted
-                    }
-                    
-                    return permissionGranted && hasAppAccess
-                }
-                else -> {
-                    // For older versions, just check permission
-                    val granted = ContextCompat.checkSelfPermission(
-                        this,
-                        android.Manifest.permission.QUERY_ALL_PACKAGES
-                    ) == PackageManager.PERMISSION_GRANTED
-                    
-                    Log.d(TAG, "Query All Packages permission (older Android): $granted")
-                    return granted
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking QUERY_ALL_PACKAGES permission", e)
-            false
-        }
-    }
-    
-    private fun launchPermissionActivity() {
-        try {
-            Log.d(TAG, "Launching PermissionActivity")
-            val intent = Intent(this, PermissionActivity::class.java)
-            startActivity(intent)
-            
-            // Don't finish MainActivity immediately, let user return
-        } catch (e: Exception) {
-            Log.e(TAG, "Error launching PermissionActivity", e)
-            showErrorDialog("Permission Setup Failed", 
-                "Unable to open permission setup. Please enable permissions manually in Settings.")
+                .setCancelable(false)
+                .show()
+        } catch (dialogError: Exception) {
+            Log.e(TAG, "Failed to show error dialog", dialogError)
+            Toast.makeText(this, "Critical error occurred", Toast.LENGTH_LONG).show()
+            finish()
         }
     }
     
@@ -729,4 +748,5 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Error: $message", Toast.LENGTH_LONG).show()
         }
     }
+} 
 } 

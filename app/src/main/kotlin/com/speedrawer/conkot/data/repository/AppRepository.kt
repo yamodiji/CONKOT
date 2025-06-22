@@ -94,14 +94,8 @@ class AppRepository(
             _isLoading.postValue(true)
             
             try {
-                // Check if we have permission to query apps
-                if (!hasQueryAllPackagesPermission()) {
-                    Log.w(TAG, "No QUERY_ALL_PACKAGES permission, cannot refresh apps")
-                    _isLoading.postValue(false)
-                    return@withContext
-                }
-                
-                val installedApps = getInstalledApps()
+                // Try to get apps with whatever permissions we have
+                val installedApps = getInstalledAppsWithFallback()
                 Log.d(TAG, "Found ${installedApps.size} installed apps")
                 
                 if (installedApps.isNotEmpty()) {
@@ -112,11 +106,26 @@ class AppRepository(
                     cleanupUninstalledApps(installedApps.map { it.packageName }.toSet())
                     Log.d(TAG, "Cleaned up uninstalled apps")
                 } else {
-                    Log.w(TAG, "No apps found during refresh")
+                    Log.w(TAG, "No apps found during refresh - trying alternative methods")
+                    // Try alternative methods if no apps found
+                    val fallbackApps = getAppsViaAlternativeMethods()
+                    if (fallbackApps.isNotEmpty()) {
+                        appDao.insertApps(fallbackApps)
+                        Log.d(TAG, "Inserted ${fallbackApps.size} apps via fallback methods")
+                    }
                 }
                 
             } catch (e: SecurityException) {
-                Log.e(TAG, "Security exception during app refresh - missing permissions", e)
+                Log.e(TAG, "Security exception during app refresh - trying fallback methods", e)
+                try {
+                    val fallbackApps = getAppsViaAlternativeMethods()
+                    if (fallbackApps.isNotEmpty()) {
+                        appDao.insertApps(fallbackApps)
+                        Log.d(TAG, "Inserted ${fallbackApps.size} apps via fallback after security exception")
+                    }
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Fallback methods also failed", e2)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error during app refresh", e)
             } finally {
@@ -166,7 +175,216 @@ class AppRepository(
     }
     
     /**
-     * Get installed apps from system
+     * Get installed apps with fallback methods
+     */
+    private fun getInstalledAppsWithFallback(): List<AppInfo> {
+        return try {
+            // Try the primary method first
+            val primaryApps = getInstalledApps()
+            if (primaryApps.isNotEmpty()) {
+                primaryApps
+            } else {
+                // If primary method fails, try alternatives
+                Log.d(TAG, "Primary method returned no apps, trying alternatives")
+                getAppsViaAlternativeMethods()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Primary method failed, trying alternatives", e)
+            getAppsViaAlternativeMethods()
+        }
+    }
+    
+    /**
+     * Alternative methods to get apps when permissions are limited
+     */
+    private fun getAppsViaAlternativeMethods(): List<AppInfo> {
+        val apps = mutableListOf<AppInfo>()
+        
+        try {
+            // Method 1: Get launcher apps (usually works even with limited permissions)
+            val launcherApps = getLauncherApps()
+            apps.addAll(launcherApps)
+            Log.d(TAG, "Found ${launcherApps.size} launcher apps")
+            
+            // Method 2: Try to get apps by category
+            val categoryApps = getAppsByCategory()
+            apps.addAll(categoryApps)
+            Log.d(TAG, "Found ${categoryApps.size} category apps")
+            
+            // Method 3: Try well-known package names
+            val knownApps = getWellKnownApps()
+            apps.addAll(knownApps)
+            Log.d(TAG, "Found ${knownApps.size} well-known apps")
+            
+            // Remove duplicates
+            val uniqueApps = apps.distinctBy { it.packageName }
+            Log.d(TAG, "Total unique apps found via alternatives: ${uniqueApps.size}")
+            
+            return uniqueApps
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in alternative app discovery methods", e)
+            return emptyList()
+        }
+    }
+    
+    private fun getLauncherApps(): List<AppInfo> {
+        val apps = mutableListOf<AppInfo>()
+        
+        try {
+            val intent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            
+            val resolveInfos = packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            Log.d(TAG, "Found ${resolveInfos.size} launcher activities")
+            
+            for (resolveInfo in resolveInfos) {
+                try {
+                    val packageName = resolveInfo.activityInfo.packageName
+                    if (shouldHideApp(packageName)) continue
+                    
+                    val appInfo = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+                    val appName = packageManager.getApplicationLabel(appInfo).toString()
+                    
+                    val appInfoItem = AppInfo(
+                        packageName = packageName,
+                        appName = appName,
+                        versionName = "Unknown",
+                        versionCode = 0,
+                        isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                        installTimeMillis = System.currentTimeMillis(),
+                        updateTimeMillis = System.currentTimeMillis(),
+                        category = "Launcher",
+                        isEnabled = appInfo.enabled,
+                        launchCount = 0,
+                        lastLaunchTime = 0,
+                        isFavorite = false
+                    )
+                    
+                    apps.add(appInfoItem)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error processing launcher app", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting launcher apps", e)
+        }
+        
+        return apps
+    }
+    
+    private fun getAppsByCategory(): List<AppInfo> {
+        val apps = mutableListOf<AppInfo>()
+        
+        val categories = listOf(
+            Intent.CATEGORY_APP_BROWSER,
+            Intent.CATEGORY_APP_CALCULATOR,
+            Intent.CATEGORY_APP_CALENDAR,
+            Intent.CATEGORY_APP_CONTACTS,
+            Intent.CATEGORY_APP_EMAIL,
+            Intent.CATEGORY_APP_GALLERY,
+            Intent.CATEGORY_APP_MAPS,
+            Intent.CATEGORY_APP_MESSAGING,
+            Intent.CATEGORY_APP_MUSIC
+        )
+        
+        categories.forEach { category ->
+            try {
+                val intent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(category)
+                }
+                
+                val resolveInfos = packageManager.queryIntentActivities(intent, 0)
+                
+                resolveInfos.forEach { resolveInfo ->
+                    try {
+                        val packageName = resolveInfo.activityInfo.packageName
+                        if (shouldHideApp(packageName)) return@forEach
+                        
+                        val appInfo = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+                        val appName = packageManager.getApplicationLabel(appInfo).toString()
+                        
+                        val appInfoItem = AppInfo(
+                            packageName = packageName,
+                            appName = appName,
+                            versionName = "Unknown",
+                            versionCode = 0,
+                            isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                            installTimeMillis = System.currentTimeMillis(),
+                            updateTimeMillis = System.currentTimeMillis(),
+                            category = category.removePrefix("android.intent.category.APP_"),
+                            isEnabled = appInfo.enabled,
+                            launchCount = 0,
+                            lastLaunchTime = 0,
+                            isFavorite = false
+                        )
+                        
+                        apps.add(appInfoItem)
+                    } catch (e: Exception) {
+                        // Ignore individual failures
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore category failures
+            }
+        }
+        
+        return apps
+    }
+    
+    private fun getWellKnownApps(): List<AppInfo> {
+        val apps = mutableListOf<AppInfo>()
+        
+        val wellKnownPackages = listOf(
+            "com.android.settings",
+            "com.android.calculator2",
+            "com.android.contacts",
+            "com.android.dialer",
+            "com.android.camera2",
+            "com.android.gallery3d",
+            "com.android.chrome",
+            "com.google.android.gm",
+            "com.google.android.apps.maps",
+            "com.google.android.youtube",
+            "com.whatsapp",
+            "com.facebook.katana",
+            "com.instagram.android",
+            "com.twitter.android",
+            "com.spotify.music",
+            "com.netflix.mediaclient"
+        )
+        
+        wellKnownPackages.forEach { packageName ->
+            try {
+                val appInfo = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+                val appName = packageManager.getApplicationLabel(appInfo).toString()
+                
+                val appInfoItem = AppInfo(
+                    packageName = packageName,
+                    appName = appName,
+                    versionName = "Unknown",
+                    versionCode = 0,
+                    isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                    installTimeMillis = System.currentTimeMillis(),
+                    updateTimeMillis = System.currentTimeMillis(),
+                    category = "Popular",
+                    isEnabled = appInfo.enabled,
+                    launchCount = 0,
+                    lastLaunchTime = 0,
+                    isFavorite = false
+                )
+                
+                apps.add(appInfoItem)
+            } catch (e: Exception) {
+                // App not installed, skip
+            }
+        }
+        
+        return apps
+    }
+
+    /**
+     * Get installed apps from system (original method)
      */
     private fun getInstalledApps(): List<AppInfo> {
         val apps = mutableListOf<AppInfo>()
