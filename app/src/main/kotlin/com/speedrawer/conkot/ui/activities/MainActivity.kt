@@ -548,11 +548,8 @@ class MainActivity : AppCompatActivity() {
     
     private fun updateSearchHistoryVisibility(show: Boolean) {
         try {
-            binding.historyRecyclerView.visibility = if (show && viewModel.searchHistory.isNotEmpty()) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
+            val shouldShow = show && viewModel.searchHistory.isNotEmpty()
+            binding.historyRecyclerView.visibility = if (shouldShow) View.VISIBLE else View.GONE
         } catch (e: Exception) {
             Log.e(TAG, "Error updating search history visibility", e)
         }
