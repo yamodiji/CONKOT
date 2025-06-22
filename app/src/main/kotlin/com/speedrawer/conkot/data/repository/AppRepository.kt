@@ -112,6 +112,8 @@ class AppRepository(
                     if (fallbackApps.isNotEmpty()) {
                         appDao.insertApps(fallbackApps)
                         Log.d(TAG, "Inserted ${fallbackApps.size} apps via fallback methods")
+                    } else {
+                        Log.d(TAG, "No fallback apps found")
                     }
                 }
                 
@@ -122,6 +124,8 @@ class AppRepository(
                     if (fallbackApps.isNotEmpty()) {
                         appDao.insertApps(fallbackApps)
                         Log.d(TAG, "Inserted ${fallbackApps.size} apps via fallback after security exception")
+                    } else {
+                        Log.d(TAG, "No fallback apps found after security exception")
                     }
                 } catch (e2: Exception) {
                     Log.e(TAG, "Fallback methods also failed", e2)
