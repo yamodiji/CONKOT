@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
@@ -91,34 +92,65 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun hasRequiredPermissions(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11+ requires QUERY_ALL_PACKAGES permission
-            try {
-                packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-                true
-            } catch (e: SecurityException) {
-                Log.e(TAG, "QUERY_ALL_PACKAGES permission not granted", e)
-                false
+        return try {
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                    // Android 11+ (including Android 15) - Check multiple permission methods
+                    val hasQueryPackages = try {
+                        packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+                        true
+                    } catch (e: SecurityException) {
+                        Log.w(TAG, "QUERY_ALL_PACKAGES permission not available", e)
+                        false
+                    }
+                    
+                    val hasOverlayPermission = Settings.canDrawOverlays(this)
+                    
+                    Log.d(TAG, "Android ${Build.VERSION.RELEASE}: QueryPackages=$hasQueryPackages, Overlay=$hasOverlayPermission")
+                    
+                    // For Android 11+, we need at least overlay permission or query packages permission
+                    hasQueryPackages || hasOverlayPermission
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                    // Android 6-10 - Check overlay permission
+                    Settings.canDrawOverlays(this)
+                }
+                else -> {
+                    // Android 5 and below - No special permissions needed
+                    true
+                }
             }
-        } else {
-            true // Older versions don't need special permission
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking permissions", e)
+            false
         }
     }
     
     private fun showPermissionError() {
         try {
             AlertDialog.Builder(this)
-                .setTitle("Permission Required")
-                .setMessage("This app needs permission to access installed apps. Please enable 'Display over other apps' permission in Settings.")
-                .setPositiveButton("Open Settings") { _, _ ->
+                .setTitle("App Discovery Permissions Required")
+                .setMessage("""
+                    CONKOT needs special permissions to discover your installed apps on Android ${Build.VERSION.RELEASE}.
+                    
+                    This is required for the app to function properly.
+                    
+                    Tap "Setup Permissions" to be guided through the process.
+                """.trimIndent())
+                .setPositiveButton("Setup Permissions") { _, _ ->
                     try {
-                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS)
+                        val intent = Intent(this, PermissionActivity::class.java)
                         startActivity(intent)
+                        finish()
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to open settings", e)
+                        Log.e(TAG, "Failed to open permission activity", e)
+                        openManualSettings()
                     }
                 }
-                .setNegativeButton("Exit") { _, _ ->
+                .setNegativeButton("Manual Setup") { _, _ ->
+                    openManualSettings()
+                }
+                .setNeutralButton("Exit") { _, _ ->
                     finish()
                 }
                 .setCancelable(false)
@@ -126,6 +158,20 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to show permission dialog", e)
             Toast.makeText(this, "Permission required to access installed apps", Toast.LENGTH_LONG).show()
+            openManualSettings()
+        }
+    }
+    
+    private fun openManualSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.parse("package:$packageName")
+            }
+            startActivity(intent)
+            finish()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open app settings", e)
+            Toast.makeText(this, "Please go to Settings → Apps → CONKOT and enable permissions", Toast.LENGTH_LONG).show()
             finish()
         }
     }

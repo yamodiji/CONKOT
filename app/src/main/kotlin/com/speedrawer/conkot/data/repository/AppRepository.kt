@@ -130,12 +130,31 @@ class AppRepository(
      */
     private fun hasQueryAllPackagesPermission(): Boolean {
         return try {
+            Log.d(TAG, "Checking QUERY_ALL_PACKAGES permission on Android ${Build.VERSION.RELEASE}")
+            
             // Try to get a small sample of installed apps
             val testIntent = Intent(Intent.ACTION_MAIN, null).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
             }
-            packageManager.queryIntentActivities(testIntent, 0)
-            true
+            
+            val resolveInfos = packageManager.queryIntentActivities(testIntent, 0)
+            val hasPermission = resolveInfos.isNotEmpty()
+            
+            Log.d(TAG, "Permission check result: $hasPermission (found ${resolveInfos.size} apps)")
+            
+            // Also check if we can get installed applications
+            if (!hasPermission) {
+                try {
+                    val installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+                    val alternativePermission = installedApps.isNotEmpty()
+                    Log.d(TAG, "Alternative permission check: $alternativePermission (found ${installedApps.size} apps)")
+                    return alternativePermission
+                } catch (e: Exception) {
+                    Log.w(TAG, "Alternative permission check failed", e)
+                }
+            }
+            
+            hasPermission
         } catch (e: SecurityException) {
             Log.w(TAG, "QUERY_ALL_PACKAGES permission not granted", e)
             false

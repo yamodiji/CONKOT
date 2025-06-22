@@ -2,15 +2,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Required permissions for app drawer functionality -->
+    <!-- Core permissions for app drawer functionality -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     
-    <!-- Optional permissions for launcher functionality -->
+    <!-- Launcher permissions -->
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.SET_WALLPAPER_HINTS" />
+    
+    <!-- Internet for updates (optional) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:name=".App"
@@ -24,7 +28,7 @@
         android:hardwareAccelerated="true"
         android:largeHeap="false"
         android:requestLegacyExternalStorage="false"
-        tools:targetApi="31">
+        tools:targetApi="35">
 
         <!-- Main Activity (App Drawer) -->
         <activity
@@ -48,7 +52,11 @@
             </intent-filter>
         </activity>
 
-        <!-- Note: Settings and AppInfo activities will be added when implemented -->
+        <!-- Permission request activity for Android 11+ -->
+        <activity
+            android:name=".ui.activities.PermissionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CONKOT.NoActionBar" />
 
         <!-- File provider for sharing app info -->
         <provider
@@ -63,12 +71,60 @@
 
     </application>
 
-    <!-- Query all packages for app discovery -->
+    <!-- Enhanced queries for app discovery - Android 11+ compatibility -->
     <queries>
+        <!-- Main launcher apps -->
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        
+        <!-- All app categories for comprehensive discovery -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+        </intent>
+        
+        <!-- System apps and services -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        
+        <!-- Package installer for app management -->
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE" />
+            <data android:scheme="package" />
+        </intent>
+        
+        <!-- Settings and system apps -->
+        <intent>
+            <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
+            <data android:scheme="package" />
+        </intent>
+        
+        <!-- Share functionality -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
+        </intent>
+        
+        <!-- Web browsers -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        
+        <!-- Common package names for system apps -->
+        <package android:name="com.android.settings" />
+        <package android:name="com.android.launcher" />
+        <package android:name="com.android.launcher3" />
+        <package android:name="com.google.android.apps.nexuslauncher" />
+        <package android:name="com.sec.android.app.launcher" />
+        <package android:name="com.miui.home" />
+        <package android:name="com.oneplus.launcher" />
+        <package android:name="com.huawei.android.launcher" />
+        <package android:name="com.oppo.launcher" />
+        <package android:name="com.vivo.launcher" />
     </queries>
 
 </manifest> 
