@@ -25,6 +25,14 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
         
+    - name: Download Gradle Wrapper JAR
+      run: |
+        if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+          echo "Downloading Gradle 8.4 wrapper JAR..."
+          curl -L -o gradle/wrapper/gradle-wrapper.jar \
+            https://github.com/gradle/gradle/raw/v8.4.0/gradle/wrapper/gradle-wrapper.jar
+        fi
+        
     - name: Cache Gradle packages
       uses: actions/cache@v3
       with:
