@@ -48,40 +48,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Settings Activity -->
-        <activity
-            android:name=".ui.activities.SettingsActivity"
-            android:exported="false"
-            android:label="@string/settings"
-            android:parentActivityName=".ui.activities.MainActivity"
-            android:theme="@style/Theme.CONKOT" />
-
-        <!-- App Info Activity -->
-        <activity
-            android:name=".ui.activities.AppInfoActivity"
-            android:exported="false"
-            android:label="@string/app_info"
-            android:parentActivityName=".ui.activities.MainActivity"
-            android:theme="@style/Theme.CONKOT" />
-
-        <!-- Boot receiver for quick actions -->
-        <receiver
-            android:name=".services.BootReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter android:priority="1000">
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="android.intent.action.PACKAGE_REPLACED" />
-                <data android:scheme="package" />
-            </intent-filter>
-        </receiver>
-
-        <!-- Quick Actions Service -->
-        <service
-            android:name=".services.QuickActionsService"
-            android:enabled="true"
-            android:exported="false" />
+        <!-- Note: Settings and AppInfo activities will be added when implemented -->
 
         <!-- File provider for sharing app info -->
         <provider

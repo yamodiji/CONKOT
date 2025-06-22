@@ -24,12 +24,23 @@ android {
         resConfigs "en"
     }
 
+    signingConfigs {
+        debug {
+            // Use default debug keystore for debugging
+            storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix ".debug"
             debuggable true
             minifyEnabled false
             shrinkResources false
+            signingConfig signingConfigs.debug
         }
         
         release {
@@ -37,6 +48,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug  // Use debug signing for now
             
             // Additional size optimizations
             ndk {
