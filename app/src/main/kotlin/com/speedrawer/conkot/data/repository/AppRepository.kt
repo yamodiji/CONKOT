@@ -761,16 +761,4 @@ class AppRepository(
         }
     }
     
-    private fun shouldHideApp(packageName: String): Boolean {
-        val hiddenPackages = setOf(
-            "com.android.packageinstaller",
-            "com.android.wallpaper",
-            "com.android.systemui",
-            "com.android.keychain",
-            "com.android.printspooler"
-        )
-        return hiddenPackages.contains(packageName) || 
-               packageName.contains("test", ignoreCase = true) ||
-               packageName.contains("stub", ignoreCase = true)
-    }
 } 
