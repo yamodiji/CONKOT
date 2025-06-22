@@ -151,7 +151,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * Get display apps based on current state
      */
     fun getDisplayApps(): Flow<List<AppInfo>> {
-        return filteredApps.asFlow()
+        return filteredApps
     }
     
     /**
