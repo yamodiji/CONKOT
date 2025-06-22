@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary colors -->
+    <color name="primary_600">#1E88E5</color>
+    <color name="primary_700">#1976D2</color>
+    <color name="primary_100">#BBDEFB</color>
+    <color name="primary_900">#0D47A1</color>
+    
+    <!-- Secondary colors -->
+    <color name="secondary_200">#80CBC4</color>
+    <color name="secondary_700">#00796B</color>
+    <color name="secondary_100">#B2DFDB</color>
+    <color name="secondary_900">#004D40</color>
+    
+    <!-- Neutral colors -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    
+    <!-- Surface colors -->
+    <color name="background">#FFFFFF</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="on_surface">#1C1B1F</color>
+    
+    <!-- Special colors -->
+    <color name="favorite">#FFC107</color>
+</resources> 

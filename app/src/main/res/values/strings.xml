@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CONKOT</string>
+    <string name="search_hint">Search apps...</string>
+    <string name="settings">Settings</string>
+    <string name="app_info">App Info</string>
+    <string name="refresh">Refresh</string>
+    <string name="clear_history">Clear History</string>
+    <string name="no_apps_found">No apps found</string>
+    <string name="try_adjusting_search">Try adjusting your search</string>
+    <string name="add_to_favorites">Add to favorites</string>
+    <string name="remove_from_favorites">Remove from favorites</string>
+    <string name="open_app_settings">Open app settings</string>
+    <string name="could_not_open_settings">Could not open app settings</string>
+    <string name="search_history">Search History</string>
+    <string name="clear_search">Clear search</string>
+    
+    <!-- Settings -->
+    <string name="theme">Theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_system">System</string>
+    <string name="icon_size">Icon Size</string>
+    <string name="icon_size_small">Small</string>
+    <string name="icon_size_medium">Medium</string>
+    <string name="icon_size_large">Large</string>
+    <string name="icon_size_extra_large">Extra Large</string>
+    <string name="background_opacity">Background Opacity</string>
+    <string name="vibration">Vibration</string>
+    <string name="vibration_summary">Haptic feedback on app interactions</string>
+    <string name="animations">Animations</string>
+    <string name="animations_summary">Smooth transitions and effects</string>
+    <string name="auto_focus">Auto Focus</string>
+    <string name="auto_focus_summary">Automatically focus search bar</string>
+    <string name="fuzzy_search">Fuzzy Search</string>
+    <string name="fuzzy_search_summary">Smart matching for app names</string>
+    <string name="show_keyboard">Show Keyboard</string>
+    <string name="show_keyboard_summary">Automatically show keyboard</string>
+    <string name="show_search_history">Show Search History</string>
+    <string name="show_search_history_summary">Display recent searches</string>
+    <string name="clear_search_on_close">Clear Search on Close</string>
+    <string name="clear_search_on_close_summary">Clear search when app is minimized</string>
+    <string name="reset_to_defaults">Reset to Defaults</string>
+    <string name="reset_confirmation">Reset all settings to default values?</string>
+    <string name="reset">Reset</string>
+    <string name="cancel">Cancel</string>
+    
+    <!-- Content descriptions -->
+    <string name="search_icon">Search</string>
+    <string name="clear_icon">Clear search</string>
+    <string name="settings_icon">Settings</string>
+    <string name="favorite_icon">Favorite</string>
+    <string name="app_icon">App icon</string>
+</resources> 
