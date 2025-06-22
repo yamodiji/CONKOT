@@ -11,6 +11,7 @@ permissions:
   contents: write
   packages: write
   actions: read
+  pull-requests: read
 
 jobs:
   build-and-release:
@@ -80,6 +81,13 @@ jobs:
       id: date
       run: echo "date=$(date +'%Y-%m-%d-%H%M')" >> $GITHUB_OUTPUT
         
+    - name: List APK files
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        echo "=== APK Files ==="
+        find app/build/outputs/apk -name "*.apk" -type f || echo "No APK files found"
+        ls -la app/build/outputs/apk/release/ || echo "Release directory not found"
+        
     - name: Create Release
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       uses: softprops/action-gh-release@v1
@@ -108,6 +116,7 @@ jobs:
           app/build/outputs/apk/release/*.apk
         draft: false
         prerelease: false
+        fail_on_unmatched_files: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
