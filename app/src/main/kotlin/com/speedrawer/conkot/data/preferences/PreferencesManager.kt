@@ -108,7 +108,7 @@ class PreferencesManager(context: Context) {
         
         // Keep only last 20 searches
         if (history.size > MAX_SEARCH_HISTORY) {
-            searchHistory = history.takeLast(MAX_SEARCH_HISTORY).toSet()
+            searchHistory = history.toList().takeLast(MAX_SEARCH_HISTORY).toSet()
         } else {
             searchHistory = history
         }

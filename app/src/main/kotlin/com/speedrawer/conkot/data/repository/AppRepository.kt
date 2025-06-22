@@ -114,12 +114,7 @@ class AppRepository(
                     val appInfo = AppInfo.fromPackageInfo(packageInfo, applicationInfo, appName)
                     
                     // Load existing data if available
-                    val existingApp = appDao.getApp(packageName)
-                    if (existingApp != null) {
-                        appInfo.launchCount = existingApp.launchCount
-                        appInfo.lastLaunchTime = existingApp.lastLaunchTime
-                        appInfo.isFavorite = existingApp.isFavorite
-                    }
+                    // Note: This will be handled later in a suspend context
                     
                     apps.add(appInfo)
                     

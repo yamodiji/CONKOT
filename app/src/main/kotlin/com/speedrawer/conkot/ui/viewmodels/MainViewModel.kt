@@ -156,7 +156,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             allApps.map { apps -> apps.take(50) }
         } else {
             // Show filtered apps when searching
-            filteredApps.asFlow()
+            flow { emit(filteredApps.value) }
         }
     }
     

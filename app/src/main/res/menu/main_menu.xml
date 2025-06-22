@@ -8,6 +8,11 @@
         app:showAsAction="ifRoom" />
     
     <item
+        android:id="@+id/action_clear_history"
+        android:title="Clear History"
+        app:showAsAction="never" />
+    
+    <item
         android:id="@+id/action_settings"
         android:title="@string/settings"
         app:showAsAction="always" />

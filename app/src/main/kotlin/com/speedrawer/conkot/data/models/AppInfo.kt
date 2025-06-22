@@ -61,7 +61,7 @@ data class AppInfo(
             return AppInfo(
                 packageName = packageInfo.packageName,
                 appName = appName,
-                systemAppName = applicationInfo.loadLabel(null)?.toString(),
+                systemAppName = null, // Will be set by caller with proper PackageManager
                 versionName = packageInfo.versionName,
                 versionCode = packageInfo.longVersionCode,
                 isSystemApp = (applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,

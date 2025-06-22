@@ -85,7 +85,7 @@ class MainActivity : AppCompatActivity() {
         // History adapter
         historyAdapter = SearchHistoryAdapter { query ->
             viewModel.searchFromHistory(query)
-            binding.searchEditText.setText(query)
+            binding.searchEditText.setText(query as CharSequence)
             binding.searchEditText.setSelection(query.length)
         }
         
