@@ -23,4 +23,7 @@
     
     <!-- Special colors -->
     <color name="favorite">#FFC107</color>
+    
+    <!-- Launcher icon colors -->
+    <color name="ic_launcher_background">#1976D2</color>
 </resources> 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Allow backup of all app data except sensitive files -->
+        <include domain="sharedpref" path="."/>
+        <include domain="database" path="."/>
+        <include domain="file" path="."/>
+        
+        <!-- Exclude sensitive data -->
+        <exclude domain="sharedpref" path="sensitive_prefs.xml"/>
+    </cloud-backup>
+    
+    <device-transfer>
+        <!-- Allow transfer of all app data -->
+        <include domain="sharedpref" path="."/>
+        <include domain="database" path="."/>
+        <include domain="file" path="."/>
+    </device-transfer>
+</data-extraction-rules> 
