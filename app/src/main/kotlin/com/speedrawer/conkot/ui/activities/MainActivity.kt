@@ -748,5 +748,4 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Error: $message", Toast.LENGTH_LONG).show()
         }
     }
-} 
-} 
+}
