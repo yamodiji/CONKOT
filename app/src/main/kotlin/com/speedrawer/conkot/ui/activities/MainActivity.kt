@@ -1,7 +1,11 @@
 package com.speedrawer.conkot.ui.activities
 
+import android.Manifest
+import android.app.AlertDialog
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -14,7 +18,6 @@ import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.viewModels
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -29,6 +32,7 @@ import com.speedrawer.conkot.utils.AppConstants
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+// Android 15 Universal Permission Support - v2.0
 class MainActivity : AppCompatActivity() {
     
     private lateinit var binding: ActivityMainBinding
