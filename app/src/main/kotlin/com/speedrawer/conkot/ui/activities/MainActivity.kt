@@ -330,7 +330,7 @@ class MainActivity : AppCompatActivity() {
                             
                             // Show/hide empty state
                             val isEmpty = apps.isEmpty()
-                            binding.emptyStateContainer.visibility = if (isEmpty) View.VISIBLE else View.GONE
+                            binding.emptyStateLayout.visibility = if (isEmpty) View.VISIBLE else View.GONE
                             binding.appsRecyclerView.visibility = if (isEmpty) View.GONE else View.VISIBLE
                         } catch (e: Exception) {
                             Log.e(TAG, "Error updating app list", e)
