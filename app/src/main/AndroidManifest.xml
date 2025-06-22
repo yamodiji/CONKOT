@@ -87,53 +87,56 @@
 
     </application>
 
-    <!-- Enhanced queries for app discovery - Android 11+ compatibility -->
+    <!-- Android 15 Compatibility: Enhanced permission declarations -->
+    <!-- QUERY_ALL_PACKAGES permission - restricted on Android 15 for sideloaded apps -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" 
+        tools:targetApi="30" />
+    
+    <!-- Essential permissions that work on Android 15 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="32" />
+    
+    <!-- Android 15: Alternative to MANAGE_EXTERNAL_STORAGE for limited scope -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" 
+        tools:targetApi="30" />
+    
+    <!-- System alert window - restricted on Android 15 for sideloaded apps -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    
+    <!-- Android 15 Workaround: Comprehensive intent queries for app discovery -->
     <queries>
-        <!-- Main launcher apps -->
+        <!-- Main launcher intent - this works even with restricted permissions -->
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
         
-        <!-- All app categories for comprehensive discovery -->
+        <!-- Home screen launchers -->
         <intent>
             <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
         </intent>
         
-        <!-- System apps and services -->
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
-        </intent>
-        
-        <!-- Package installer for app management -->
-        <intent>
-            <action android:name="android.intent.action.INSTALL_PACKAGE" />
-            <data android:scheme="package" />
-        </intent>
-        
-        <!-- Settings and system apps -->
+        <!-- App info intent -->
         <intent>
             <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
-            <data android:scheme="package" />
         </intent>
         
-        <!-- Share functionality -->
-        <intent>
-            <action android:name="android.intent.action.SEND" />
-            <data android:mimeType="*/*" />
-        </intent>
-        
-        <!-- Web browsers -->
+        <!-- Android 15: Essential app categories that work without QUERY_ALL_PACKAGES -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="http" />
         </intent>
         
-        <!-- File management -->
         <intent>
-            <action android:name="android.intent.action.GET_CONTENT" />
-            <data android:mimeType="*/*" />
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
         </intent>
         
         <!-- Camera apps -->
@@ -141,10 +144,10 @@
             <action android:name="android.media.action.IMAGE_CAPTURE" />
         </intent>
         
-        <!-- Email apps -->
+        <!-- Messaging apps -->
         <intent>
-            <action android:name="android.intent.action.SENDTO" />
-            <data android:scheme="mailto" />
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
         </intent>
         
         <!-- Phone apps -->
@@ -153,39 +156,82 @@
             <data android:scheme="tel" />
         </intent>
         
-        <!-- Common package names for system apps -->
-        <package android:name="com.android.settings" />
-        <package android:name="com.android.launcher" />
-        <package android:name="com.android.launcher3" />
-        <package android:name="com.google.android.apps.nexuslauncher" />
-        <package android:name="com.sec.android.app.launcher" />
-        <package android:name="com.miui.home" />
-        <package android:name="com.oneplus.launcher" />
-        <package android:name="com.huawei.android.launcher" />
-        <package android:name="com.oppo.launcher" />
-        <package android:name="com.vivo.launcher" />
-        <package android:name="com.android.vending" />
-        <package android:name="com.google.android.gms" />
+        <!-- Settings apps -->
+        <intent>
+            <action android:name="android.settings.SETTINGS" />
+        </intent>
+        
+        <!-- Calculator apps -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.APP_CALCULATOR" />
+        </intent>
+        
+        <!-- Music apps -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="audio/*" />
+        </intent>
+        
+        <!-- Video apps -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="video/*" />
+        </intent>
+        
+        <!-- Email apps -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+        
+        <!-- Maps apps -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        
+        <!-- File manager apps -->
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="*/*" />
+        </intent>
+        
+        <!-- Android 15: Well-known app packages that work without broad permissions -->
         <package android:name="com.android.chrome" />
-        <package android:name="com.google.android.googlequicksearchbox" />
-        <package android:name="com.android.contacts" />
-        <package android:name="com.android.dialer" />
-        <package android:name="com.android.mms" />
-        <package android:name="com.android.camera2" />
-        <package android:name="com.google.android.apps.photos" />
-        <package android:name="com.android.gallery3d" />
-        <package android:name="com.spotify.music" />
+        <package android:name="com.google.android.apps.maps" />
         <package android:name="com.whatsapp" />
         <package android:name="com.facebook.katana" />
         <package android:name="com.instagram.android" />
         <package android:name="com.twitter.android" />
+        <package android:name="com.spotify.music" />
         <package android:name="com.netflix.mediaclient" />
         <package android:name="com.amazon.mShop.android.shopping" />
         <package android:name="com.paypal.android.p2pmobile" />
-        <package android:name="com.google.android.apps.maps" />
         <package android:name="com.uber.app" />
-        <package android:name="com.microsoft.office.outlook" />
+        <package android:name="com.airbnb.android" />
+        <package android:name="com.skype.raider" />
+        <package android:name="com.viber.voip" />
+        <package android:name="com.telegram.messenger" />
+        <package android:name="com.snapchat.android" />
+        <package android:name="com.pinterest" />
+        <package android:name="com.linkedin.android" />
+        <package android:name="com.dropbox.android" />
+        <package android:name="com.google.android.apps.docs" />
+        <package android:name="com.microsoft.office.word" />
+        <package android:name="com.adobe.reader" />
+        <package android:name="com.android.vending" />
         <package android:name="com.google.android.gm" />
+        <package android:name="com.google.android.calendar" />
+        <package android:name="com.google.android.contacts" />
+        <package android:name="com.android.settings" />
+        <package android:name="com.android.calculator2" />
+        <package android:name="com.android.camera2" />
+        <package android:name="com.android.gallery3d" />
+        <package android:name="com.google.android.apps.photos" />
+        <package android:name="com.android.music" />
+        <package android:name="com.google.android.music" />
+        <package android:name="com.android.providers.downloads.ui" />
     </queries>
 
 </manifest> 

@@ -33,6 +33,13 @@ import com.speedrawer.conkot.ui.viewmodels.MainViewModel
 import com.speedrawer.conkot.utils.AppConstants
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import android.provider.MediaStore
+import android.app.usage.UsageStatsManager
+import android.app.usage.UsageStats
+import android.os.Process
+import android.app.AppOpsManager
+import android.content.Context
+import java.util.*
 
 // Android 15 Universal Permission Support - v2.0
 class MainActivity : AppCompatActivity() {
@@ -89,14 +96,9 @@ class MainActivity : AppCompatActivity() {
             
             when {
                 Build.VERSION.SDK_INT >= 35 -> {
-                    // Android 15 - Check if we can access apps
-                    if (canAccessApps()) {
-                        Log.d(TAG, "Android 15: Apps accessible, loading apps")
-                        loadApps()
-                    } else {
-                        Log.d(TAG, "Android 15: Apps not accessible, requesting permissions")
-                        requestAndroid15Permissions()
-                    }
+                    // Android 15 - Use enhanced compatibility mode
+                    Log.d(TAG, "Android 15: Using enhanced compatibility mode")
+                    checkAndroidVersionSpecificPermissions()
                 }
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
                     // Android 11-14 - Check QUERY_ALL_PACKAGES
@@ -743,6 +745,194 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Error showing error dialog", e)
             Toast.makeText(this, "Error: $message", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * Android 15 Compatibility: Enhanced permission checking
+     * Handles Android 15's "Restricted Settings" for sideloaded apps
+     */
+    private fun checkAndroidVersionSpecificPermissions(): Boolean {
+        val androidVersion = Build.VERSION.SDK_INT
+        Log.d(TAG, "Android version: $androidVersion (Android ${Build.VERSION.RELEASE})")
+        
+        when {
+            androidVersion >= Build.VERSION_CODES.VANILLA_ICE_CREAM -> {
+                // Android 15+ (API 35): Handle restricted settings for sideloaded apps
+                return handleAndroid15RestrictedPermissions()
+            }
+            androidVersion >= Build.VERSION_CODES.TIRAMISU -> {
+                // Android 13-14: Handle standard restricted settings
+                return handleAndroid13RestrictedPermissions()
+            }
+            androidVersion >= Build.VERSION_CODES.R -> {
+                // Android 11-12: Standard QUERY_ALL_PACKAGES handling
+                return handleAndroid11Permissions()
+            }
+            else -> {
+                // Android 10 and below: No QUERY_ALL_PACKAGES needed
+                Log.d(TAG, "Android 10 or below - no special permissions needed")
+                return true
+            }
+        }
+    }
+    
+    /**
+     * Android 15 specific permission handling
+     * Works around "Restricted Settings" and "Enhanced Confirmation Mode"
+     */
+    private fun handleAndroid15RestrictedPermissions(): Boolean {
+        Log.d(TAG, "Handling Android 15 restricted permissions for sideloaded apps")
+        
+        // Check if app was sideloaded (not from Play Store)
+        val isAppSideloaded = isAppSideloaded()
+        Log.d(TAG, "App sideloaded: $isAppSideloaded")
+        
+        if (isAppSideloaded) {
+            // Android 15: Permission dialogs are disabled for sideloaded apps
+            showAndroid15SideloadedAppGuidance()
+            
+            // Use alternative app discovery methods that work without QUERY_ALL_PACKAGES
+            return useAlternativeAppDiscovery()
+        } else {
+            // App from Play Store - normal permission flow
+            return checkQueryAllPackagesPermission()
+        }
+    }
+    
+    /**
+     * Check if app was sideloaded (not installed from Play Store)
+     */
+    private fun isAppSideloaded(): Boolean {
+        return try {
+            val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                packageManager.getInstallSourceInfo(packageName).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getInstallerPackageName(packageName)
+            }
+            
+            val isFromPlayStore = installer == "com.android.vending"
+            Log.d(TAG, "Installer package: $installer, From Play Store: $isFromPlayStore")
+            
+            !isFromPlayStore
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not determine installer package", e)
+            true // Assume sideloaded if we can't determine
+        }
+    }
+    
+    /**
+     * Show guidance for Android 15 sideloaded apps about restricted permissions
+     */
+    private fun showAndroid15SideloadedAppGuidance() {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Android 15 Compatibility Mode")
+            .setMessage("""
+                This app is running on Android 15 with enhanced security restrictions for sideloaded apps.
+                
+                📱 What this means:
+                • Permission dialogs are disabled by Android 15's security system
+                • This is normal behavior for apps not installed from Play Store
+                • The app will work with limited app discovery capabilities
+                
+                🔍 App Discovery Methods:
+                • Launcher apps (home screen apps)
+                • Popular apps (Chrome, WhatsApp, etc.)
+                • Apps by category (Camera, Music, etc.)
+                • Recently used apps
+                
+                ⚙️ To enable full permissions (optional):
+                1. Go to Settings → Apps → Speed Drawer
+                2. Tap menu (⋮) → "Allow restricted settings"
+                3. Enable "Query all packages" permission
+                
+                The app will continue to work with the available discovery methods.
+            """.trimIndent())
+            .setPositiveButton("Continue") { _, _ ->
+                // Continue with Android 15 compatible app discovery
+                loadAppsWithAndroid15Compatibility()
+            }
+            .setNeutralButton("Open Settings") { _, _ ->
+                openAppSettings()
+            }
+            .setCancelable(false)
+            .create()
+            
+        dialog.show()
+    }
+    
+    /**
+     * Use alternative app discovery methods for Android 15 restricted environments
+     */
+    private fun useAlternativeAppDiscovery(): Boolean {
+        Log.d(TAG, "Using alternative app discovery for Android 15")
+        
+        // Start app loading with Android 15 compatible methods
+        loadAppsWithAndroid15Compatibility()
+        
+        return true // Always return true since we have fallback methods
+    }
+    
+    /**
+     * Load apps using Android 15 compatible methods
+     */
+    private fun loadAppsWithAndroid15Compatibility() {
+        lifecycleScope.launch {
+            try {
+                binding.progressBar.visibility = View.VISIBLE
+                binding.emptyStateLayout.visibility = View.GONE
+                
+                // Show user what's happening
+                showToast("Loading apps with Android 15 compatibility...")
+                
+                // Use the repository's Android 15 compatibility method through ViewModel
+                viewModel.loadAppsWithAndroid15Compatibility()
+                
+                // The apps will be automatically updated through the ViewModel's LiveData
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in Android 15 compatibility loading", e)
+                showEmptyStateWithAndroid15Guidance()
+            } finally {
+                binding.progressBar.visibility = View.GONE
+            }
+        }
+    }
+    
+    /**
+     * Show empty state with Android 15 specific guidance
+     */
+    private fun showEmptyStateWithAndroid15Guidance() {
+        binding.emptyStateLayout.visibility = View.VISIBLE
+        binding.emptyStateText.text = """
+            Android 15 Restricted Mode Active
+            
+            🔒 Permission dialogs are disabled by Android 15 security
+            📱 This is normal for sideloaded apps
+            
+            To enable full app discovery:
+            1. Go to Settings → Apps → Speed Drawer
+            2. Tap menu (⋮) → "Allow restricted settings"
+            3. Enable "Query all packages" permission
+            
+            Or install from Google Play Store for full functionality.
+        """.trimIndent()
+    }
+    
+    /**
+     * Open app settings for manual permission configuration
+     */
+    private fun openAppSettings() {
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error opening app settings", e)
+            showToast("Could not open app settings")
         }
     }
 }
