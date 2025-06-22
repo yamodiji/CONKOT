@@ -8,9 +8,25 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     
+    <!-- System overlay permissions -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.SYSTEM_OVERLAY_WINDOW" />
+    
+    <!-- Access installed packages -->
+    <uses-permission android:name="android.permission.GET_TASKS" />
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
+    
     <!-- Launcher permissions -->
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.SET_WALLPAPER_HINTS" />
+    
+    <!-- Storage permissions for Android 15+ -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     
     <!-- Internet for updates (optional) -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -114,6 +130,29 @@
             <data android:scheme="http" />
         </intent>
         
+        <!-- File management -->
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="*/*" />
+        </intent>
+        
+        <!-- Camera apps -->
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        
+        <!-- Email apps -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+        
+        <!-- Phone apps -->
+        <intent>
+            <action android:name="android.intent.action.CALL" />
+            <data android:scheme="tel" />
+        </intent>
+        
         <!-- Common package names for system apps -->
         <package android:name="com.android.settings" />
         <package android:name="com.android.launcher" />
@@ -125,6 +164,28 @@
         <package android:name="com.huawei.android.launcher" />
         <package android:name="com.oppo.launcher" />
         <package android:name="com.vivo.launcher" />
+        <package android:name="com.android.vending" />
+        <package android:name="com.google.android.gms" />
+        <package android:name="com.android.chrome" />
+        <package android:name="com.google.android.googlequicksearchbox" />
+        <package android:name="com.android.contacts" />
+        <package android:name="com.android.dialer" />
+        <package android:name="com.android.mms" />
+        <package android:name="com.android.camera2" />
+        <package android:name="com.google.android.apps.photos" />
+        <package android:name="com.android.gallery3d" />
+        <package android:name="com.spotify.music" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.facebook.katana" />
+        <package android:name="com.instagram.android" />
+        <package android:name="com.twitter.android" />
+        <package android:name="com.netflix.mediaclient" />
+        <package android:name="com.amazon.mShop.android.shopping" />
+        <package android:name="com.paypal.android.p2pmobile" />
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.uber.app" />
+        <package android:name="com.microsoft.office.outlook" />
+        <package android:name="com.google.android.gm" />
     </queries>
 
 </manifest> 

@@ -1,5 +1,6 @@
 package com.speedrawer.conkot.data.repository
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -449,5 +450,298 @@ class AppRepository(
                 emptyMap()
             }
         }
+    }
+    
+    private suspend fun loadAppsFromSystem(): List<AppInfo> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Loading apps from system on Android ${Build.VERSION.SDK_INT}")
+            
+            val packageManager = context.packageManager
+            val apps = mutableListOf<AppInfo>()
+            
+            // Enhanced permission checking
+            val hasQueryAllPackages = when {
+                Build.VERSION.SDK_INT >= 35 -> {
+                    // Android 15 - Multiple fallback methods
+                    checkAndroid15Permissions(packageManager)
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                    // Android 11-14
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.QUERY_ALL_PACKAGES
+                    ) == PackageManager.PERMISSION_GRANTED
+                }
+                else -> {
+                    // Android 10 and below
+                    true
+                }
+            }
+            
+            Log.d(TAG, "Has Query All Packages permission: $hasQueryAllPackages")
+            
+            // Try multiple methods to get apps
+            val installedApps = try {
+                if (hasQueryAllPackages) {
+                    packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+                } else {
+                    // Fallback: get apps through intent queries
+                    getAppsViaIntentQueries(packageManager)
+                }
+            } catch (e: SecurityException) {
+                Log.w(TAG, "SecurityException getting installed apps, trying fallback", e)
+                getAppsViaIntentQueries(packageManager)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting installed apps", e)
+                emptyList()
+            }
+            
+            Log.d(TAG, "Found ${installedApps.size} installed applications")
+            
+            if (installedApps.isEmpty()) {
+                Log.w(TAG, "No apps found - this indicates a permission issue on Android ${Build.VERSION.SDK_INT}")
+            }
+            
+            // Process each app
+            installedApps.forEach { appInfo ->
+                try {
+                    // Skip system components that aren't apps
+                    if (shouldSkipApp(appInfo)) {
+                        return@forEach
+                    }
+                    
+                    val packageInfo = try {
+                        packageManager.getPackageInfo(appInfo.packageName, 0)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not get package info for ${appInfo.packageName}", e)
+                        null
+                    }
+                    
+                    val appName = try {
+                        packageManager.getApplicationLabel(appInfo).toString()
+                    } catch (e: Exception) {
+                        appInfo.packageName
+                    }
+                    
+                    val launchIntent = try {
+                        packageManager.getLaunchIntentForPackage(appInfo.packageName)
+                    } catch (e: Exception) {
+                        null
+                    }
+                    
+                    // Only include apps that can be launched or are specifically system apps we want
+                    if (launchIntent != null || isImportantSystemApp(appInfo.packageName)) {
+                        val appInfoItem = AppInfo(
+                            id = 0, // Will be set by Room
+                            packageName = appInfo.packageName,
+                            appName = appName,
+                            launchCount = 0,
+                            lastUsed = 0,
+                            isFavorite = false,
+                            isHidden = false,
+                            installTime = packageInfo?.firstInstallTime ?: System.currentTimeMillis(),
+                            updateTime = packageInfo?.lastUpdateTime ?: System.currentTimeMillis(),
+                            versionName = packageInfo?.versionName ?: "Unknown",
+                            category = determineAppCategory(appInfo)
+                        )
+                        
+                        apps.add(appInfoItem)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error processing app ${appInfo.packageName}", e)
+                }
+            }
+            
+            Log.d(TAG, "Successfully processed ${apps.size} apps")
+            
+            // If we still have very few apps, try additional methods
+            if (apps.size < 10) {
+                Log.w(TAG, "Very few apps found (${apps.size}), trying additional discovery methods")
+                val additionalApps = getAdditionalApps(packageManager)
+                apps.addAll(additionalApps)
+                Log.d(TAG, "After additional discovery: ${apps.size} total apps")
+            }
+            
+            apps
+        } catch (e: Exception) {
+            Log.e(TAG, "Critical error loading apps from system", e)
+            emptyList()
+        }
+    }
+    
+    private fun checkAndroid15Permissions(packageManager: PackageManager): Boolean {
+        return try {
+            // Method 1: Check manifest permission
+            val manifestPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.QUERY_ALL_PACKAGES
+            ) == PackageManager.PERMISSION_GRANTED
+            
+            // Method 2: Try to query a reasonable number of apps
+            val installedApps = try {
+                packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            
+            val canQueryApps = installedApps.size > 20
+            
+            // Method 3: Check if we can query launcher intents
+            val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            val launcherApps = try {
+                packageManager.queryIntentActivities(launcherIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            
+            val canQueryLauncher = launcherApps.size > 5
+            
+            Log.d(TAG, "Android 15 permission check - Manifest: $manifestPermission, Apps: $canQueryApps (${installedApps.size}), Launcher: $canQueryLauncher (${launcherApps.size})")
+            
+            // Android 15 is more flexible - if any method works, we have sufficient access
+            manifestPermission || canQueryApps || canQueryLauncher
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking Android 15 permissions", e)
+            false
+        }
+    }
+    
+    private fun getAppsViaIntentQueries(packageManager: PackageManager): List<ApplicationInfo> {
+        val apps = mutableSetOf<ApplicationInfo>()
+        
+        try {
+            // Query launcher apps
+            val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            
+            val launcherApps = packageManager.queryIntentActivities(
+                launcherIntent, 
+                PackageManager.MATCH_DEFAULT_ONLY
+            )
+            
+            Log.d(TAG, "Found ${launcherApps.size} launcher apps via intent query")
+            
+            launcherApps.forEach { resolveInfo ->
+                try {
+                    val appInfo = packageManager.getApplicationInfo(
+                        resolveInfo.activityInfo.packageName,
+                        PackageManager.GET_META_DATA
+                    )
+                    apps.add(appInfo)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not get app info for ${resolveInfo.activityInfo.packageName}", e)
+                }
+            }
+            
+            // Try other intent categories
+            val additionalCategories = listOf(
+                Intent.CATEGORY_APP_BROWSER,
+                Intent.CATEGORY_APP_CALCULATOR,
+                Intent.CATEGORY_APP_CALENDAR,
+                Intent.CATEGORY_APP_CONTACTS,
+                Intent.CATEGORY_APP_EMAIL,
+                Intent.CATEGORY_APP_GALLERY,
+                Intent.CATEGORY_APP_MAPS,
+                Intent.CATEGORY_APP_MESSAGING,
+                Intent.CATEGORY_APP_MUSIC
+            )
+            
+            additionalCategories.forEach { category ->
+                try {
+                    val intent = Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(category)
+                    }
+                    val categoryApps = packageManager.queryIntentActivities(intent, 0)
+                    
+                    categoryApps.forEach { resolveInfo ->
+                        try {
+                            val appInfo = packageManager.getApplicationInfo(
+                                resolveInfo.activityInfo.packageName,
+                                PackageManager.GET_META_DATA
+                            )
+                            apps.add(appInfo)
+                        } catch (e: Exception) {
+                            // Ignore individual failures
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignore category query failures
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying apps via intents", e)
+        }
+        
+        Log.d(TAG, "Found ${apps.size} unique apps via intent queries")
+        return apps.toList()
+    }
+    
+    private fun getAdditionalApps(packageManager: PackageManager): List<AppInfo> {
+        val additionalApps = mutableListOf<AppInfo>()
+        
+        try {
+            // Try to get specific well-known apps
+            val commonPackages = listOf(
+                "com.android.settings",
+                "com.android.chrome",
+                "com.google.android.gm",
+                "com.whatsapp",
+                "com.facebook.katana",
+                "com.instagram.android",
+                "com.spotify.music",
+                "com.netflix.mediaclient",
+                "com.google.android.apps.maps",
+                "com.android.calculator2",
+                "com.android.contacts",
+                "com.android.dialer",
+                "com.android.camera2"
+            )
+            
+            commonPackages.forEach { packageName ->
+                try {
+                    val appInfo = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+                    val appName = packageManager.getApplicationLabel(appInfo).toString()
+                    
+                    val appInfoItem = AppInfo(
+                        id = 0,
+                        packageName = packageName,
+                        appName = appName,
+                        launchCount = 0,
+                        lastUsed = 0,
+                        isFavorite = false,
+                        isHidden = false,
+                        installTime = System.currentTimeMillis(),
+                        updateTime = System.currentTimeMillis(),
+                        versionName = "Unknown",
+                        category = "System"
+                    )
+                    
+                    additionalApps.add(appInfoItem)
+                } catch (e: Exception) {
+                    // App not installed, skip
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting additional apps", e)
+        }
+        
+        return additionalApps
+    }
+    
+    private fun isImportantSystemApp(packageName: String): Boolean {
+        val importantSystemApps = setOf(
+            "com.android.settings",
+            "com.android.calculator2",
+            "com.android.contacts",
+            "com.android.dialer",
+            "com.android.camera2",
+            "com.android.gallery3d"
+        )
+        return importantSystemApps.contains(packageName)
     }
 } 

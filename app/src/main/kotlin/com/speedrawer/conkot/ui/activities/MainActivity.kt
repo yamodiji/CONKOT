@@ -558,4 +558,164 @@ class MainActivity : AppCompatActivity() {
             Log.e(TAG, "Error in onDestroy", e)
         }
     }
+
+    private fun checkPermissionsAndSetup() {
+        try {
+            Log.d(TAG, "Checking permissions for Android ${Build.VERSION.SDK_INT}")
+            
+            // Enhanced permission checking for Android 15
+            when {
+                Build.VERSION.SDK_INT >= 35 -> {
+                    // Android 15 - Most restrictive
+                    if (!hasAndroid15Permissions()) {
+                        Log.w(TAG, "Android 15 permissions not granted, launching PermissionActivity")
+                        launchPermissionActivity()
+                        return
+                    }
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                    // Android 11-14
+                    if (!hasQueryAllPackagesPermission()) {
+                        Log.w(TAG, "QUERY_ALL_PACKAGES permission not granted, launching PermissionActivity")
+                        launchPermissionActivity()
+                        return
+                    }
+                }
+                else -> {
+                    // Android 10 and below - usually no issues
+                    Log.d(TAG, "Android ${Build.VERSION.SDK_INT} - checking basic permissions")
+                }
+            }
+            
+            // If we get here, permissions should be OK, proceed with setup
+            setupUI()
+            loadApps()
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking permissions", e)
+            showErrorDialog("Permission Check Failed", 
+                "Unable to verify app permissions. Error: ${e.message}")
+        }
+    }
+    
+    private fun hasAndroid15Permissions(): Boolean {
+        return try {
+            // Multiple permission checks for Android 15
+            val hasQueryPackages = hasQueryAllPackagesPermission()
+            val canQueryInstalledApps = canQueryInstalledApplications()
+            val hasBasicAccess = hasBasicAppAccess()
+            
+            Log.d(TAG, "Android 15 permission check - Query: $hasQueryPackages, Apps: $canQueryInstalledApps, Basic: $hasBasicAccess")
+            
+            // Android 15 is more lenient, if we can query any apps, continue
+            return hasQueryPackages || canQueryInstalledApps || hasBasicAccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking Android 15 permissions", e)
+            false
+        }
+    }
+    
+    private fun canQueryInstalledApplications(): Boolean {
+        return try {
+            val pm = packageManager
+            val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            Log.d(TAG, "Can query ${apps.size} applications")
+            apps.size > 10 // If we can see more than 10 apps, permissions are likely OK
+        } catch (e: Exception) {
+            Log.e(TAG, "Cannot query installed applications", e)
+            false
+        }
+    }
+    
+    private fun hasBasicAppAccess(): Boolean {
+        return try {
+            val pm = packageManager
+            // Try to get launcher apps
+            val intent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            val apps = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            Log.d(TAG, "Can query ${apps.size} launcher apps")
+            apps.size > 5 // If we can see some launcher apps, basic access is working
+        } catch (e: Exception) {
+            Log.e(TAG, "Cannot query launcher apps", e)
+            false
+        }
+    }
+    
+    private fun hasQueryAllPackagesPermission(): Boolean {
+        return try {
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                    // For Android 11+, check multiple ways
+                    val permissionGranted = ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.QUERY_ALL_PACKAGES
+                    ) == PackageManager.PERMISSION_GRANTED
+                    
+                    // Try to query all packages as a test
+                    val pm = packageManager
+                    val installedApps = try {
+                        pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    
+                    val hasAppAccess = installedApps.size > 50 // Reasonable threshold
+                    
+                    Log.d(TAG, "Query All Packages - Permission: $permissionGranted, Apps found: ${installedApps.size}, HasAccess: $hasAppAccess")
+                    
+                    // For Android 15, be more lenient
+                    if (Build.VERSION.SDK_INT >= 35) {
+                        return hasAppAccess || permissionGranted
+                    }
+                    
+                    return permissionGranted && hasAppAccess
+                }
+                else -> {
+                    // For older versions, just check permission
+                    val granted = ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.QUERY_ALL_PACKAGES
+                    ) == PackageManager.PERMISSION_GRANTED
+                    
+                    Log.d(TAG, "Query All Packages permission (older Android): $granted")
+                    return granted
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking QUERY_ALL_PACKAGES permission", e)
+            false
+        }
+    }
+    
+    private fun launchPermissionActivity() {
+        try {
+            Log.d(TAG, "Launching PermissionActivity")
+            val intent = Intent(this, PermissionActivity::class.java)
+            startActivity(intent)
+            
+            // Don't finish MainActivity immediately, let user return
+        } catch (e: Exception) {
+            Log.e(TAG, "Error launching PermissionActivity", e)
+            showErrorDialog("Permission Setup Failed", 
+                "Unable to open permission setup. Please enable permissions manually in Settings.")
+        }
+    }
+    
+    private fun showErrorDialog(title: String, message: String) {
+        try {
+            AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("OK") { _, _ ->
+                    // Handle OK button click
+                }
+                .setCancelable(false)
+                .show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing error dialog", e)
+            Toast.makeText(this, "Error: $message", Toast.LENGTH_LONG).show()
+        }
+    }
 } 
