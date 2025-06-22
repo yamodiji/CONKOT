@@ -24,12 +24,7 @@ plugins {
     id 'org.jetbrains.kotlin.android' version "$kotlin_version" apply false
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
+// Repositories are now managed in settings.gradle via dependencyResolutionManagement
 
 // Clean task
 task clean(type: Delete) {
