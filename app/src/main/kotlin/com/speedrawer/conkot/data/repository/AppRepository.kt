@@ -506,7 +506,7 @@ class AppRepository(
             installedApps.forEach { appInfo ->
                 try {
                     // Skip system components that aren't apps
-                    if (shouldSkipApp(appInfo)) {
+                    if (shouldHideApp(appInfo.packageName)) {
                         return@forEach
                     }
                     
@@ -532,17 +532,18 @@ class AppRepository(
                     // Only include apps that can be launched or are specifically system apps we want
                     if (launchIntent != null || isImportantSystemApp(appInfo.packageName)) {
                         val appInfoItem = AppInfo(
-                            id = 0, // Will be set by Room
                             packageName = appInfo.packageName,
                             appName = appName,
-                            launchCount = 0,
-                            lastUsed = 0,
-                            isFavorite = false,
-                            isHidden = false,
-                            installTime = packageInfo?.firstInstallTime ?: System.currentTimeMillis(),
-                            updateTime = packageInfo?.lastUpdateTime ?: System.currentTimeMillis(),
                             versionName = packageInfo?.versionName ?: "Unknown",
-                            category = determineAppCategory(appInfo)
+                            versionCode = packageInfo?.longVersionCode ?: 0,
+                            isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                            installTimeMillis = packageInfo?.firstInstallTime ?: System.currentTimeMillis(),
+                            updateTimeMillis = packageInfo?.lastUpdateTime ?: System.currentTimeMillis(),
+                            category = getCategoryName(appInfo.category),
+                            isEnabled = appInfo.enabled,
+                            launchCount = 0,
+                            lastLaunchTime = 0,
+                            isFavorite = false
                         )
                         
                         apps.add(appInfoItem)
@@ -707,17 +708,18 @@ class AppRepository(
                     val appName = packageManager.getApplicationLabel(appInfo).toString()
                     
                     val appInfoItem = AppInfo(
-                        id = 0,
                         packageName = packageName,
                         appName = appName,
-                        launchCount = 0,
-                        lastUsed = 0,
-                        isFavorite = false,
-                        isHidden = false,
-                        installTime = System.currentTimeMillis(),
-                        updateTime = System.currentTimeMillis(),
                         versionName = "Unknown",
-                        category = "System"
+                        versionCode = 0,
+                        isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                        installTimeMillis = System.currentTimeMillis(),
+                        updateTimeMillis = System.currentTimeMillis(),
+                        category = "System",
+                        isEnabled = appInfo.enabled,
+                        launchCount = 0,
+                        lastLaunchTime = 0,
+                        isFavorite = false
                     )
                     
                     additionalApps.add(appInfoItem)
@@ -743,5 +745,32 @@ class AppRepository(
             "com.android.gallery3d"
         )
         return importantSystemApps.contains(packageName)
+    }
+    
+    private fun getCategoryName(category: Int): String {
+        return when (category) {
+            ApplicationInfo.CATEGORY_GAME -> "Game"
+            ApplicationInfo.CATEGORY_AUDIO -> "Audio"
+            ApplicationInfo.CATEGORY_VIDEO -> "Video"
+            ApplicationInfo.CATEGORY_IMAGE -> "Image"
+            ApplicationInfo.CATEGORY_SOCIAL -> "Social"
+            ApplicationInfo.CATEGORY_NEWS -> "News"
+            ApplicationInfo.CATEGORY_MAPS -> "Maps"
+            ApplicationInfo.CATEGORY_PRODUCTIVITY -> "Productivity"
+            else -> "Other"
+        }
+    }
+    
+    private fun shouldHideApp(packageName: String): Boolean {
+        val hiddenPackages = setOf(
+            "com.android.packageinstaller",
+            "com.android.wallpaper",
+            "com.android.systemui",
+            "com.android.keychain",
+            "com.android.printspooler"
+        )
+        return hiddenPackages.contains(packageName) || 
+               packageName.contains("test", ignoreCase = true) ||
+               packageName.contains("stub", ignoreCase = true)
     }
 } 

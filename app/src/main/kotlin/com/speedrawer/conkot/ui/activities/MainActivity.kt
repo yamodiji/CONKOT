@@ -593,7 +593,14 @@ class MainActivity : AppCompatActivity() {
             
             // If we get here, permissions should be OK, proceed with setup
             setupUI()
-            loadApps()
+            // Refresh apps after setup
+            lifecycleScope.launch {
+                try {
+                    viewModel.refreshApps()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error refreshing apps", e)
+                }
+            }
             
         } catch (e: Exception) {
             Log.e(TAG, "Error checking permissions", e)
@@ -654,7 +661,7 @@ class MainActivity : AppCompatActivity() {
                     // For Android 11+, check multiple ways
                     val permissionGranted = ContextCompat.checkSelfPermission(
                         this,
-                        Manifest.permission.QUERY_ALL_PACKAGES
+                        android.Manifest.permission.QUERY_ALL_PACKAGES
                     ) == PackageManager.PERMISSION_GRANTED
                     
                     // Try to query all packages as a test
@@ -680,7 +687,7 @@ class MainActivity : AppCompatActivity() {
                     // For older versions, just check permission
                     val granted = ContextCompat.checkSelfPermission(
                         this,
-                        Manifest.permission.QUERY_ALL_PACKAGES
+                        android.Manifest.permission.QUERY_ALL_PACKAGES
                     ) == PackageManager.PERMISSION_GRANTED
                     
                     Log.d(TAG, "Query All Packages permission (older Android): $granted")
