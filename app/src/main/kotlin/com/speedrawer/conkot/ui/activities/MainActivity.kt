@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -22,7 +23,7 @@ import com.speedrawer.conkot.ui.adapters.AppGridAdapter
 import com.speedrawer.conkot.ui.adapters.SearchHistoryAdapter
 import com.speedrawer.conkot.ui.viewmodels.MainViewModel
 import com.speedrawer.conkot.utils.AppConstants
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -32,83 +33,138 @@ class MainActivity : AppCompatActivity() {
     private lateinit var appAdapter: AppGridAdapter
     private lateinit var historyAdapter: SearchHistoryAdapter
     
+    companion object {
+        private const val TAG = "MainActivity"
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        Log.d(TAG, "onCreate started")
         
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        
-        setupUI()
-        setupRecyclerView()
-        setupSearch()
-        setupObservers()
-        
-        // Auto-focus search if enabled
-        if (viewModel.showKeyboard) {
-            showKeyboard()
+        try {
+            Log.d(TAG, "Inflating layout...")
+            binding = ActivityMainBinding.inflate(layoutInflater)
+            setContentView(binding.root)
+            Log.d(TAG, "Layout inflated successfully")
+            
+            Log.d(TAG, "Setting up UI...")
+            setupUI()
+            Log.d(TAG, "UI setup complete")
+            
+            Log.d(TAG, "Setting up RecyclerView...")
+            setupRecyclerView()
+            Log.d(TAG, "RecyclerView setup complete")
+            
+            Log.d(TAG, "Setting up search...")
+            setupSearch()
+            Log.d(TAG, "Search setup complete")
+            
+            Log.d(TAG, "Setting up observers...")
+            setupObservers()
+            Log.d(TAG, "Observers setup complete")
+            
+            // Auto-focus search if enabled
+            try {
+                if (viewModel.showKeyboard) {
+                    showKeyboard()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error showing keyboard", e)
+            }
+            
+            Log.d(TAG, "onCreate completed successfully")
+        } catch (e: Exception) {
+            // Handle initialization errors gracefully
+            Log.e(TAG, "Error in onCreate", e)
+            e.printStackTrace()
+            Toast.makeText(this, "Error initializing app: ${e.message}", Toast.LENGTH_LONG).show()
+            finish()
         }
     }
     
     private fun setupUI() {
-        // Setup toolbar
-        setSupportActionBar(binding.toolbar)
-        supportActionBar?.setDisplayShowTitleEnabled(false)
-        
-        // Setup clear button
-        binding.clearButton.setOnClickListener {
-            clearSearch()
-        }
-        
-        // Setup refresh
-        binding.swipeRefresh.setOnRefreshListener {
-            viewModel.refreshApps()
+        try {
+            // Setup toolbar
+            setSupportActionBar(binding.toolbar)
+            supportActionBar?.setDisplayShowTitleEnabled(false)
+            
+            // Setup clear button
+            binding.clearButton.setOnClickListener {
+                clearSearch()
+            }
+            
+            // Setup refresh
+            binding.swipeRefresh.setOnRefreshListener {
+                viewModel.refreshApps()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in setupUI", e)
+            throw e
         }
     }
     
     private fun setupRecyclerView() {
-        // App grid adapter
-        appAdapter = AppGridAdapter(
-            onAppClick = { app ->
-                viewModel.launchApp(app)
-                if (viewModel.preferencesManager.clearSearchOnClose) {
-                    clearSearch()
-                }
-            },
-            onAppLongClick = { app ->
-                viewModel.onAppLongPress(app)
-                showAppOptionsDialog(app)
-            },
-            getAppIcon = { app -> viewModel.getAppIcon(app) },
-            animationsEnabled = { viewModel.animationsEnabled }
-        )
-        
-        // History adapter
-        historyAdapter = SearchHistoryAdapter { query ->
-            viewModel.searchFromHistory(query)
-            binding.searchEditText.setText(query as CharSequence)
-            binding.searchEditText.setSelection(query.length)
+        try {
+            // App grid adapter
+            appAdapter = AppGridAdapter(
+                onAppClick = { app ->
+                    viewModel.launchApp(app)
+                    if (viewModel.preferencesManager.clearSearchOnClose) {
+                        clearSearch()
+                    }
+                },
+                onAppLongClick = { app ->
+                    viewModel.onAppLongPress(app)
+                    showAppOptionsDialog(app)
+                },
+                getAppIcon = { app -> viewModel.getAppIcon(app) },
+                animationsEnabled = { viewModel.animationsEnabled }
+            )
+            
+            // History adapter
+            historyAdapter = SearchHistoryAdapter { query ->
+                viewModel.searchFromHistory(query)
+                binding.searchEditText.setText(query as CharSequence)
+                binding.searchEditText.setSelection(query.length)
+            }
+            
+            // Setup RecyclerView
+            setupAppGrid()
+            binding.historyRecyclerView.adapter = historyAdapter
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in setupRecyclerView", e)
+            throw e
         }
-        
-        // Setup RecyclerView
-        setupAppGrid()
-        binding.historyRecyclerView.adapter = historyAdapter
     }
     
     private fun setupAppGrid() {
-        val spanCount = calculateSpanCount()
-        binding.appsRecyclerView.apply {
-            layoutManager = GridLayoutManager(this@MainActivity, spanCount)
-            adapter = appAdapter
-            setHasFixedSize(true)
+        try {
+            val spanCount = calculateSpanCount()
+            binding.appsRecyclerView.apply {
+                layoutManager = GridLayoutManager(this@MainActivity, spanCount)
+                adapter = appAdapter
+                setHasFixedSize(true)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in setupAppGrid", e)
+            // Fallback to simple setup
+            binding.appsRecyclerView.apply {
+                layoutManager = GridLayoutManager(this@MainActivity, 4)
+                adapter = appAdapter
+            }
         }
     }
     
     private fun calculateSpanCount(): Int {
-        val displayMetrics = resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels
-        val iconSize = viewModel.iconSize.value + AppConstants.ITEM_PADDING * 2
-        return (screenWidth / iconSize).toInt().coerceAtLeast(3).coerceAtMost(6)
+        return try {
+            val displayMetrics = resources.displayMetrics
+            val screenWidth = displayMetrics.widthPixels
+            val iconSize = (viewModel.iconSize.value ?: 64f) + AppConstants.ITEM_PADDING * 2
+            (screenWidth / iconSize).toInt().coerceAtLeast(3).coerceAtMost(6)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating span count", e)
+            4 // Default fallback
+        }
     }
     
     private fun setupSearch() {
@@ -145,7 +201,7 @@ class MainActivity : AppCompatActivity() {
         
         // Observe apps
         lifecycleScope.launch {
-            viewModel.getDisplayApps().collect { apps ->
+            viewModel.getDisplayApps().collectLatest { apps ->
                 appAdapter.submitList(apps)
                 updateEmptyState(apps.isEmpty() && binding.searchEditText.text.isNotEmpty())
             }
@@ -156,7 +212,7 @@ class MainActivity : AppCompatActivity() {
         
         // Observe icon size changes
         lifecycleScope.launch {
-            viewModel.iconSize.collect { iconSize ->
+            viewModel.iconSize.collectLatest { iconSize ->
                 setupAppGrid() // Recalculate grid
                 appAdapter.notifyDataSetChanged()
             }

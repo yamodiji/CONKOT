@@ -151,13 +151,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * Get display apps based on current state
      */
     fun getDisplayApps(): Flow<List<AppInfo>> {
-        return if (_searchQuery.value.isEmpty()) {
-            // Show all apps when no search
-            allApps.map { apps -> apps.take(50) }
-        } else {
-            // Show filtered apps when searching
-            flow { emit(filteredApps.value) }
-        }
+        return filteredApps.asFlow()
     }
     
     /**
