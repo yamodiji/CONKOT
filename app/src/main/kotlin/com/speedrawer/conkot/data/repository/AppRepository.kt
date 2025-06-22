@@ -9,6 +9,7 @@ import android.content.pm.ResolveInfo
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.os.Build
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -24,6 +25,10 @@ class AppRepository(
 ) {
     private val packageManager = context.packageManager
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    
+    companion object {
+        private const val TAG = "AppRepository"
+    }
     
     // Cache for app icons to reduce memory usage
     private val iconCache = ConcurrentHashMap<String, android.graphics.drawable.Drawable>()
@@ -41,24 +46,40 @@ class AppRepository(
     val filteredApps: StateFlow<List<AppInfo>> = _filteredApps
     
     // All apps from database
-    val allApps: Flow<List<AppInfo>> = appDao.getAllApps()
+    val allApps: Flow<List<AppInfo>> = appDao.getAllApps().catch { e ->
+        Log.e(TAG, "Error getting all apps from database", e)
+        emit(emptyList())
+    }
     
     // Favorite apps
-    val favoriteApps: Flow<List<AppInfo>> = appDao.getFavoriteApps()
+    val favoriteApps: Flow<List<AppInfo>> = appDao.getFavoriteApps().catch { e ->
+        Log.e(TAG, "Error getting favorite apps from database", e)
+        emit(emptyList())
+    }
     
     // Most used apps
-    val mostUsedApps: Flow<List<AppInfo>> = appDao.getMostUsedApps(10)
+    val mostUsedApps: Flow<List<AppInfo>> = appDao.getMostUsedApps(10).catch { e ->
+        Log.e(TAG, "Error getting most used apps from database", e)
+        emit(emptyList())
+    }
     
     init {
         // Combine search query with all apps to create filtered results
         scope.launch {
-            combine(
-                _searchQuery,
-                allApps
-            ) { query, apps ->
-                filterApps(apps, query)
-            }.collect { filtered ->
-                _filteredApps.value = filtered
+            try {
+                combine(
+                    _searchQuery,
+                    allApps
+                ) { query, apps ->
+                    filterApps(apps, query)
+                }.catch { e ->
+                    Log.e(TAG, "Error in apps filtering flow", e)
+                    emit(emptyList())
+                }.collect { filtered ->
+                    _filteredApps.value = filtered
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting up apps filtering", e)
             }
         }
     }
@@ -68,20 +89,59 @@ class AppRepository(
      */
     suspend fun refreshInstalledApps() {
         withContext(Dispatchers.IO) {
+            Log.d(TAG, "Starting app refresh")
             _isLoading.postValue(true)
             
             try {
+                // Check if we have permission to query apps
+                if (!hasQueryAllPackagesPermission()) {
+                    Log.w(TAG, "No QUERY_ALL_PACKAGES permission, cannot refresh apps")
+                    _isLoading.postValue(false)
+                    return@withContext
+                }
+                
                 val installedApps = getInstalledApps()
-                appDao.insertApps(installedApps)
+                Log.d(TAG, "Found ${installedApps.size} installed apps")
                 
-                // Clean up old apps that are no longer installed
-                cleanupUninstalledApps(installedApps.map { it.packageName }.toSet())
+                if (installedApps.isNotEmpty()) {
+                    appDao.insertApps(installedApps)
+                    Log.d(TAG, "Inserted apps into database")
+                    
+                    // Clean up old apps that are no longer installed
+                    cleanupUninstalledApps(installedApps.map { it.packageName }.toSet())
+                    Log.d(TAG, "Cleaned up uninstalled apps")
+                } else {
+                    Log.w(TAG, "No apps found during refresh")
+                }
                 
+            } catch (e: SecurityException) {
+                Log.e(TAG, "Security exception during app refresh - missing permissions", e)
             } catch (e: Exception) {
-                // Handle errors gracefully
+                Log.e(TAG, "Error during app refresh", e)
             } finally {
                 _isLoading.postValue(false)
+                Log.d(TAG, "App refresh completed")
             }
+        }
+    }
+    
+    /**
+     * Check if app has QUERY_ALL_PACKAGES permission
+     */
+    private fun hasQueryAllPackagesPermission(): Boolean {
+        return try {
+            // Try to get a small sample of installed apps
+            val testIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            packageManager.queryIntentActivities(testIntent, 0)
+            true
+        } catch (e: SecurityException) {
+            Log.w(TAG, "QUERY_ALL_PACKAGES permission not granted", e)
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking permissions", e)
+            false
         }
     }
     
@@ -92,11 +152,14 @@ class AppRepository(
         val apps = mutableListOf<AppInfo>()
         
         try {
+            Log.d(TAG, "Querying installed apps")
+            
             val intent = Intent(Intent.ACTION_MAIN, null).apply {
                 addCategory(Intent.CATEGORY_LAUNCHER)
             }
             
             val resolveInfos = packageManager.queryIntentActivities(intent, 0)
+            Log.d(TAG, "Found ${resolveInfos.size} launcher activities")
             
             for (resolveInfo in resolveInfos) {
                 try {
@@ -112,19 +175,23 @@ class AppRepository(
                     val appName = packageManager.getApplicationLabel(applicationInfo).toString()
                     
                     val appInfo = AppInfo.fromPackageInfo(packageInfo, applicationInfo, appName)
-                    
-                    // Load existing data if available
-                    // Note: This will be handled later in a suspend context
-                    
                     apps.add(appInfo)
                     
+                } catch (e: PackageManager.NameNotFoundException) {
+                    Log.w(TAG, "Package not found: ${resolveInfo.activityInfo.packageName}")
+                    continue
                 } catch (e: Exception) {
-                    // Skip apps that cause errors
+                    Log.w(TAG, "Error processing app: ${resolveInfo.activityInfo.packageName}", e)
                     continue
                 }
             }
+            
+            Log.d(TAG, "Successfully processed ${apps.size} apps")
+            
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Security exception getting installed apps", e)
         } catch (e: Exception) {
-            // Handle system-level errors
+            Log.e(TAG, "Error getting installed apps", e)
         }
         
         return apps
@@ -141,10 +208,11 @@ class AppRepository(
             "com.miui.home",
             "com.oneplus.launcher",
             "com.android.settings",
-            "com.android.packageinstaller"
+            "com.android.packageinstaller",
+            "com.speedrawer.conkot"  // Hide our own app
         )
         
-        return hidePackages.any { packageName.contains(it) }
+        return hidePackages.any { packageName.contains(it, ignoreCase = true) }
     }
     
     /**
@@ -153,15 +221,20 @@ class AppRepository(
     private suspend fun cleanupUninstalledApps(installedPackages: Set<String>) {
         withContext(Dispatchers.IO) {
             try {
+                Log.d(TAG, "Cleaning up uninstalled apps")
                 val allDbApps = appDao.getAllApps().first()
                 val uninstalledApps = allDbApps.filter { it.packageName !in installedPackages }
+                
+                Log.d(TAG, "Found ${uninstalledApps.size} uninstalled apps to remove")
                 
                 for (app in uninstalledApps) {
                     appDao.deleteApp(app.packageName)
                 }
                 
+                Log.d(TAG, "Cleanup completed")
+                
             } catch (e: Exception) {
-                // Handle errors gracefully
+                Log.e(TAG, "Error during cleanup", e)
             }
         }
     }
@@ -170,35 +243,50 @@ class AppRepository(
      * Search apps with query
      */
     fun search(query: String) {
-        _searchQuery.value = query.trim()
+        try {
+            _searchQuery.value = query.trim()
+            Log.d(TAG, "Search query updated: '$query'")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating search query", e)
+        }
     }
     
     /**
      * Clear search
      */
     fun clearSearch() {
-        _searchQuery.value = ""
+        try {
+            _searchQuery.value = ""
+            Log.d(TAG, "Search cleared")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing search", e)
+        }
     }
     
     /**
      * Filter apps based on search query
      */
     private fun filterApps(apps: List<AppInfo>, query: String): List<AppInfo> {
-        if (query.isEmpty()) {
-            return apps.take(50) // Limit for performance
-        }
-        
-        return apps.asSequence()
-            .filter { it.matchesQuery(query) }
-            .map { app ->
-                app.apply { searchScore = calculateSearchScore(query) }
+        return try {
+            if (query.isEmpty()) {
+                apps.take(50) // Limit for performance
+            } else {
+                apps.asSequence()
+                    .filter { it.matchesQuery(query) }
+                    .map { app ->
+                        app.apply { searchScore = calculateSearchScore(query) }
+                    }
+                    .sortedWith(compareByDescending<AppInfo> { it.isFavorite }
+                        .thenByDescending { it.searchScore }
+                        .thenByDescending { it.launchCount }
+                        .thenBy { it.displayName.lowercase() })
+                    .take(50) // Limit results for performance
+                    .toList()
             }
-            .sortedWith(compareByDescending<AppInfo> { it.isFavorite }
-                .thenByDescending { it.searchScore }
-                .thenByDescending { it.launchCount }
-                .thenBy { it.displayName.lowercase() })
-            .take(50) // Limit results for performance
-            .toList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error filtering apps", e)
+            emptyList()
+        }
     }
     
     /**
@@ -206,20 +294,32 @@ class AppRepository(
      */
     suspend fun launchApp(app: AppInfo): Boolean {
         return try {
+            Log.d(TAG, "Launching app: ${app.displayName}")
             val intent = packageManager.getLaunchIntentForPackage(app.packageName)
             if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
                 
                 // Update launch count in background
                 scope.launch {
-                    appDao.incrementLaunchCount(app.packageName, System.currentTimeMillis())
+                    try {
+                        appDao.incrementLaunchCount(app.packageName, System.currentTimeMillis())
+                        Log.d(TAG, "Updated launch count for ${app.displayName}")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error updating launch count", e)
+                    }
                 }
                 
                 true
             } else {
+                Log.w(TAG, "No launch intent found for ${app.displayName}")
                 false
             }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Security exception launching app: ${app.displayName}", e)
+            false
         } catch (e: Exception) {
+            Log.e(TAG, "Error launching app: ${app.displayName}", e)
             false
         }
     }
@@ -230,9 +330,11 @@ class AppRepository(
     suspend fun toggleFavorite(app: AppInfo) {
         withContext(Dispatchers.IO) {
             try {
+                Log.d(TAG, "Toggling favorite for ${app.displayName}")
                 appDao.updateFavoriteStatus(app.packageName, !app.isFavorite)
+                Log.d(TAG, "Favorite status updated for ${app.displayName}")
             } catch (e: Exception) {
-                // Handle errors gracefully
+                Log.e(TAG, "Error toggling favorite status", e)
             }
         }
     }
@@ -247,7 +349,11 @@ class AppRepository(
                 iconCache[app.packageName] = icon
                 icon
             }
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.w(TAG, "Package not found for icon: ${app.packageName}")
+            null
         } catch (e: Exception) {
+            Log.e(TAG, "Error getting app icon: ${app.displayName}", e)
             null
         }
     }
@@ -268,7 +374,7 @@ class AppRepository(
                 vibrator?.vibrate(duration)
             }
         } catch (e: Exception) {
-            // Ignore vibration errors
+            Log.d(TAG, "Vibration not available or error occurred", e)
         }
     }
     
@@ -280,6 +386,7 @@ class AppRepository(
             try {
                 appDao.getApp(packageName)
             } catch (e: Exception) {
+                Log.e(TAG, "Error getting app details for $packageName", e)
                 null
             }
         }
@@ -291,15 +398,19 @@ class AppRepository(
     suspend fun cleanup() {
         withContext(Dispatchers.IO) {
             try {
+                Log.d(TAG, "Starting cleanup")
                 val cutoffTime = System.currentTimeMillis() - (30 * 24 * 60 * 60 * 1000L) // 30 days
                 appDao.cleanupOldApps(cutoffTime)
                 
                 // Clear icon cache if it gets too large
                 if (iconCache.size > 100) {
                     iconCache.clear()
+                    Log.d(TAG, "Cleared icon cache")
                 }
+                
+                Log.d(TAG, "Cleanup completed")
             } catch (e: Exception) {
-                // Handle errors gracefully
+                Log.e(TAG, "Error during cleanup", e)
             }
         }
     }
@@ -315,6 +426,7 @@ class AppRepository(
                     "favorite_apps" to appDao.getFavoriteCount()
                 )
             } catch (e: Exception) {
+                Log.e(TAG, "Error getting stats", e)
                 emptyMap()
             }
         }

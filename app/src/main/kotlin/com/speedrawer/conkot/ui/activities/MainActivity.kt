@@ -1,6 +1,8 @@
 package com.speedrawer.conkot.ui.activities
 
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -35,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     
     companion object {
         private const val TAG = "MainActivity"
+        private const val PERMISSION_REQUEST_CODE = 100
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,6 +45,13 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onCreate started")
         
         try {
+            // Check critical permissions first
+            if (!hasRequiredPermissions()) {
+                Log.w(TAG, "Missing required permissions")
+                showPermissionError()
+                return
+            }
+            
             Log.d(TAG, "Inflating layout...")
             binding = ActivityMainBinding.inflate(layoutInflater)
             setContentView(binding.root)
@@ -75,9 +85,70 @@ class MainActivity : AppCompatActivity() {
             Log.d(TAG, "onCreate completed successfully")
         } catch (e: Exception) {
             // Handle initialization errors gracefully
-            Log.e(TAG, "Error in onCreate", e)
-            e.printStackTrace()
-            Toast.makeText(this, "Error initializing app: ${e.message}", Toast.LENGTH_LONG).show()
+            Log.e(TAG, "Critical error in onCreate", e)
+            handleCriticalError(e)
+        }
+    }
+    
+    private fun hasRequiredPermissions(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+ requires QUERY_ALL_PACKAGES permission
+            try {
+                packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+                true
+            } catch (e: SecurityException) {
+                Log.e(TAG, "QUERY_ALL_PACKAGES permission not granted", e)
+                false
+            }
+        } else {
+            true // Older versions don't need special permission
+        }
+    }
+    
+    private fun showPermissionError() {
+        try {
+            AlertDialog.Builder(this)
+                .setTitle("Permission Required")
+                .setMessage("This app needs permission to access installed apps. Please enable 'Display over other apps' permission in Settings.")
+                .setPositiveButton("Open Settings") { _, _ ->
+                    try {
+                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS)
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to open settings", e)
+                    }
+                }
+                .setNegativeButton("Exit") { _, _ ->
+                    finish()
+                }
+                .setCancelable(false)
+                .show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to show permission dialog", e)
+            Toast.makeText(this, "Permission required to access installed apps", Toast.LENGTH_LONG).show()
+            finish()
+        }
+    }
+    
+    private fun handleCriticalError(e: Exception) {
+        try {
+            val errorMessage = "App initialization failed: ${e.message}"
+            Log.e(TAG, errorMessage, e)
+            
+            AlertDialog.Builder(this)
+                .setTitle("Error")
+                .setMessage("Sorry, the app couldn't start properly. Please try restarting the app or check if you have granted all required permissions.")
+                .setPositiveButton("Retry") { _, _ ->
+                    recreate()
+                }
+                .setNegativeButton("Exit") { _, _ ->
+                    finish()
+                }
+                .setCancelable(false)
+                .show()
+        } catch (dialogError: Exception) {
+            Log.e(TAG, "Failed to show error dialog", dialogError)
+            Toast.makeText(this, "Critical error occurred", Toast.LENGTH_LONG).show()
             finish()
         }
     }
@@ -108,24 +179,51 @@ class MainActivity : AppCompatActivity() {
             // App grid adapter
             appAdapter = AppGridAdapter(
                 onAppClick = { app ->
-                    viewModel.launchApp(app)
-                    if (viewModel.preferencesManager.clearSearchOnClose) {
-                        clearSearch()
+                    try {
+                        viewModel.launchApp(app)
+                        if (viewModel.preferencesManager.clearSearchOnClose) {
+                            clearSearch()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error launching app: ${app.displayName}", e)
+                        Toast.makeText(this, "Failed to launch ${app.displayName}", Toast.LENGTH_SHORT).show()
                     }
                 },
                 onAppLongClick = { app ->
-                    viewModel.onAppLongPress(app)
-                    showAppOptionsDialog(app)
+                    try {
+                        viewModel.onAppLongPress(app)
+                        showAppOptionsDialog(app)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error in app long click", e)
+                    }
                 },
-                getAppIcon = { app -> viewModel.getAppIcon(app) },
-                animationsEnabled = { viewModel.animationsEnabled }
+                getAppIcon = { app -> 
+                    try {
+                        viewModel.getAppIcon(app)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error getting app icon", e)
+                        ContextCompat.getDrawable(this, android.R.drawable.sym_def_app_icon)
+                    }
+                },
+                animationsEnabled = { 
+                    try {
+                        viewModel.animationsEnabled
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error checking animations enabled", e)
+                        true // Default to enabled
+                    }
+                }
             )
             
             // History adapter
             historyAdapter = SearchHistoryAdapter { query ->
-                viewModel.searchFromHistory(query)
-                binding.searchEditText.setText(query as CharSequence)
-                binding.searchEditText.setSelection(query.length)
+                try {
+                    viewModel.searchFromHistory(query)
+                    binding.searchEditText.setText(query as CharSequence)
+                    binding.searchEditText.setSelection(query.length)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in search history click", e)
+                }
             }
             
             // Setup RecyclerView
@@ -148,9 +246,14 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Error in setupAppGrid", e)
             // Fallback to simple setup
-            binding.appsRecyclerView.apply {
-                layoutManager = GridLayoutManager(this@MainActivity, 4)
-                adapter = appAdapter
+            try {
+                binding.appsRecyclerView.apply {
+                    layoutManager = GridLayoutManager(this@MainActivity, 4)
+                    adapter = appAdapter
+                }
+            } catch (fallbackError: Exception) {
+                Log.e(TAG, "Even fallback setup failed", fallbackError)
+                throw fallbackError
             }
         }
     }
@@ -168,121 +271,168 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun setupSearch() {
-        binding.searchEditText.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+        try {
+            binding.searchEditText.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    try {
+                        val query = s?.toString() ?: ""
+                        viewModel.search(query)
+                        
+                        // Show/hide clear button
+                        binding.clearButton.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
+                        
+                        // Show/hide search history
+                        updateSearchHistoryVisibility(query.isEmpty())
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error in search text changed", e)
+                    }
+                }
+                
+                override fun afterTextChanged(s: Editable?) {}
+            })
             
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val query = s?.toString() ?: ""
-                viewModel.search(query)
-                
-                // Show/hide clear button
-                binding.clearButton.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
-                
-                // Show/hide search history
-                updateSearchHistoryVisibility(query.isEmpty())
+            // Handle search actions
+            binding.searchEditText.setOnEditorActionListener { _, _, _ ->
+                try {
+                    hideKeyboard()
+                    true
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in search editor action", e)
+                    false
+                }
             }
-            
-            override fun afterTextChanged(s: Editable?) {}
-        })
-        
-        // Handle search actions
-        binding.searchEditText.setOnEditorActionListener { _, _, _ ->
-            hideKeyboard()
-            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in setupSearch", e)
+            throw e
         }
     }
     
     private fun setupObservers() {
-        // Observe loading state
-        viewModel.isLoading.observe(this) { isLoading ->
-            binding.swipeRefresh.isRefreshing = isLoading
-            binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
-        }
-        
-        // Observe apps
-        lifecycleScope.launch {
-            viewModel.getDisplayApps().collectLatest { apps ->
-                appAdapter.submitList(apps)
-                updateEmptyState(apps.isEmpty() && binding.searchEditText.text.isNotEmpty())
+        try {
+            // Observe loading state
+            viewModel.isLoading.observe(this) { isLoading ->
+                try {
+                    binding.swipeRefresh.isRefreshing = isLoading
+                    binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error updating loading state", e)
+                }
             }
-        }
-        
-        // Observe search history
-        updateSearchHistory()
-        
-        // Observe icon size changes
-        lifecycleScope.launch {
-            viewModel.iconSize.collectLatest { iconSize ->
-                setupAppGrid() // Recalculate grid
-                appAdapter.notifyDataSetChanged()
+            
+            // Observe filtered apps
+            lifecycleScope.launch {
+                try {
+                    viewModel.filteredApps.collectLatest { apps ->
+                        try {
+                            appAdapter.submitList(apps)
+                            
+                            // Show/hide empty state
+                            val isEmpty = apps.isEmpty()
+                            binding.emptyStateContainer.visibility = if (isEmpty) View.VISIBLE else View.GONE
+                            binding.appsRecyclerView.visibility = if (isEmpty) View.GONE else View.VISIBLE
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error updating app list", e)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error observing filtered apps", e)
+                }
             }
+            
+            // Observe search history
+            lifecycleScope.launch {
+                try {
+                    val history = viewModel.searchHistory.toList()
+                    historyAdapter.submitList(history)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error updating search history", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in setupObservers", e)
+            throw e
         }
     }
     
     private fun updateSearchHistoryVisibility(show: Boolean) {
-        binding.historyRecyclerView.visibility = if (show && viewModel.searchHistory.isNotEmpty()) {
-            View.VISIBLE
-        } else {
-            View.GONE
+        try {
+            binding.historyRecyclerView.visibility = if (show && viewModel.searchHistory.isNotEmpty()) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating search history visibility", e)
         }
     }
     
-    private fun updateSearchHistory() {
-        val history = viewModel.searchHistory.toList().takeLast(10).reversed()
-        historyAdapter.submitList(history)
-        updateSearchHistoryVisibility(binding.searchEditText.text.isEmpty())
-    }
-    
-    private fun updateEmptyState(isEmpty: Boolean) {
-        binding.emptyStateLayout.visibility = if (isEmpty) View.VISIBLE else View.GONE
-        binding.appsRecyclerView.visibility = if (isEmpty) View.GONE else View.VISIBLE
-    }
-    
     private fun clearSearch() {
-        binding.searchEditText.text.clear()
-        viewModel.clearSearch()
-        
-        if (viewModel.showKeyboard) {
-            showKeyboard()
+        try {
+            binding.searchEditText.text.clear()
+            viewModel.clearSearch()
+            
+            if (viewModel.showKeyboard) {
+                showKeyboard()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing search", e)
         }
     }
     
     private fun showKeyboard() {
-        binding.searchEditText.requestFocus()
-        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.showSoftInput(binding.searchEditText, InputMethodManager.SHOW_IMPLICIT)
+        try {
+            binding.searchEditText.requestFocus()
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(binding.searchEditText, InputMethodManager.SHOW_IMPLICIT)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing keyboard", e)
+        }
     }
     
     private fun hideKeyboard() {
-        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(binding.searchEditText.windowToken, 0)
+        try {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(binding.searchEditText.windowToken, 0)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error hiding keyboard", e)
+        }
     }
     
     private fun showAppOptionsDialog(app: AppInfo) {
-        val options = mutableListOf<String>()
-        options.add(if (app.isFavorite) "Remove from favorites" else "Add to favorites")
-        options.add("App info")
-        options.add("Open app settings")
-        
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(app.displayName)
-            .setItems(options.toTypedArray()) { _, which ->
-                when (which) {
-                    0 -> viewModel.toggleFavorite(app)
-                    1 -> showAppInfo(app)
-                    2 -> openAppSettings(app)
+        try {
+            val options = mutableListOf<String>()
+            options.add(if (app.isFavorite) "Remove from favorites" else "Add to favorites")
+            options.add("App info")
+            options.add("Open app settings")
+            
+            AlertDialog.Builder(this)
+                .setTitle(app.displayName)
+                .setItems(options.toTypedArray()) { _, which ->
+                    when (which) {
+                        0 -> viewModel.toggleFavorite(app)
+                        1 -> showAppInfo(app)
+                        2 -> openAppSettings(app)
+                    }
                 }
-            }
-            .show()
+                .show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing app options dialog", e)
+            Toast.makeText(this, "Error showing app options", Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun showAppInfo(app: AppInfo) {
-        // Show app info in a dialog for now
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(app.displayName)
-            .setMessage("Package: ${app.packageName}\nVersion: ${app.versionName}\nLaunches: ${app.launchCount}")
-            .setPositiveButton("OK", null)
-            .show()
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.parse("package:${app.packageName}")
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing app info", e)
+            Toast.makeText(this, "Could not open app info", Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun openAppSettings(app: AppInfo) {
@@ -292,51 +442,74 @@ class MainActivity : AppCompatActivity() {
             }
             startActivity(intent)
         } catch (e: Exception) {
+            Log.e(TAG, "Error opening app settings", e)
             Toast.makeText(this, "Could not open app settings", Toast.LENGTH_SHORT).show()
         }
     }
     
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menuInflater.inflate(R.menu.main_menu, menu)
-        return true
+        return try {
+            menuInflater.inflate(R.menu.main_menu, menu)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating options menu", e)
+            false
+        }
     }
     
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_settings -> {
-                Toast.makeText(this, "Settings coming soon", Toast.LENGTH_SHORT).show()
-                true
+        return try {
+            when (item.itemId) {
+                R.id.action_settings -> {
+                    // TODO: Open settings activity
+                    Toast.makeText(this, "Settings coming soon", Toast.LENGTH_SHORT).show()
+                    true
+                }
+                R.id.action_refresh -> {
+                    viewModel.refreshApps()
+                    true
+                }
+                R.id.action_clear_history -> {
+                    viewModel.clearSearchHistory()
+                    Toast.makeText(this, "Search history cleared", Toast.LENGTH_SHORT).show()
+                    true
+                }
+                else -> super.onOptionsItemSelected(item)
             }
-            R.id.action_refresh -> {
-                viewModel.refreshApps()
-                true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling menu item selection", e)
+            false
+        }
+    }
+    
+    override fun onBackPressed() {
+        try {
+            if (binding.searchEditText.text.isNotEmpty()) {
+                clearSearch()
+            } else {
+                super.onBackPressed()
             }
-            R.id.action_clear_history -> {
-                viewModel.clearSearchHistory()
-                updateSearchHistory()
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling back press", e)
+            super.onBackPressed()
         }
     }
     
     override fun onResume() {
         super.onResume()
-        
-        // Auto-focus if enabled and search is empty
-        if (viewModel.showKeyboard && binding.searchEditText.text.isEmpty()) {
-            binding.searchEditText.postDelayed({
-                showKeyboard()
-            }, 100)
+        try {
+            // Refresh apps when returning to activity
+            viewModel.refreshApps()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onResume", e)
         }
     }
     
-    override fun onPause() {
-        super.onPause()
-        
-        // Clear search if setting is enabled
-        if (viewModel.preferencesManager.clearSearchOnClose) {
-            clearSearch()
+    override fun onDestroy() {
+        try {
+            super.onDestroy()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onDestroy", e)
         }
     }
 } 
