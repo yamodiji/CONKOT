@@ -26,7 +26,9 @@ class App : Application() {
         // Pre-load app data in background
         Thread {
             try {
-                repository.refreshInstalledApps()
+                kotlinx.coroutines.runBlocking {
+                    repository.refreshInstalledApps()
+                }
             } catch (e: Exception) {
                 // Handle initialization errors gracefully
             }

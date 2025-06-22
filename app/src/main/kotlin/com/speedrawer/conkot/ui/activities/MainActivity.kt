@@ -220,10 +220,12 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun showAppInfo(app: AppInfo) {
-        val intent = Intent(this, AppInfoActivity::class.java).apply {
-            putExtra("package_name", app.packageName)
-        }
-        startActivity(intent)
+        // Show app info in a dialog for now
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(app.displayName)
+            .setMessage("Package: ${app.packageName}\nVersion: ${app.versionName}\nLaunches: ${app.launchCount}")
+            .setPositiveButton("OK", null)
+            .show()
     }
     
     private fun openAppSettings(app: AppInfo) {
@@ -245,7 +247,7 @@ class MainActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_settings -> {
-                startActivity(Intent(this, SettingsActivity::class.java))
+                Toast.makeText(this, "Settings coming soon", Toast.LENGTH_SHORT).show()
                 true
             }
             R.id.action_refresh -> {

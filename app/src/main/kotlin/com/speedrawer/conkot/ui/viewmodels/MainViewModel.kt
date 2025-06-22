@@ -15,7 +15,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     
     private val app = application as App
     private val repository: AppRepository = app.repository
-    private val preferencesManager: PreferencesManager = app.preferencesManager
+    val preferencesManager: PreferencesManager = app.preferencesManager
     
     // Loading state
     val isLoading: LiveData<Boolean> = repository.isLoading

@@ -13,7 +13,6 @@ import kotlinx.coroutines.launch
     version = 1,
     exportSchema = false
 )
-@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     
     abstract fun appDao(): AppDao
@@ -61,8 +60,4 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
     }
-}
-
-class Converters {
-    // Add any type converters if needed in the future
 } 
